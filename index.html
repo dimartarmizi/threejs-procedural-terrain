@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Procedural Terrain Engine</title>
+	<style>
+		body {
+			margin: 0;
+			overflow: hidden;
+			background: #000;
+		}
+
+		#app {
+			width: 100vw;
+			height: 100vh;
+		}
+
+		#ui-container {
+			position: absolute;
+			top: 10px;
+			left: 10px;
+			pointer-events: none;
+		}
+
+		.hud {
+			color: white;
+			font-family: 'Inter', sans-serif;
+			text-shadow: 1px 1px 2px black;
+			font-size: 14px;
+		}
+
+		canvas {
+			display: block;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="app"></div>
+	<div id="ui-container">
+		<div class="hud" id="stats-hud">
+			<div id="coords">X: 0, Z: 0</div>
+			<div id="biome">Biome: -</div>
+			<div id="time">Time: -</div>
+		</div>
+	</div>
+	<script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
