@@ -119,6 +119,9 @@ export class VegetationSystem {
 	}
 
 	spawnForChunk(chunkKey, cx, cz, chunkSize) {
+		// Avoid duplicate spawning for the same coordinate
+		if (this.chunkVegetation.has(chunkKey)) return;
+
 		const rng = new SeededRandom(this.seed + '_' + chunkKey);
 		const count = this.settings.treeDensity || 50;
 
@@ -133,9 +136,7 @@ export class VegetationSystem {
 			const rx = (rng.next() - 0.5) * chunkSize + cx * chunkSize;
 			const rz = (rng.next() - 0.5) * chunkSize + cz * chunkSize;
 
-			const h = this.heightGenerator.getHeight(rx, rz);
-			const temp = this.biomeMap.getTemperature(rx, rz);
-			const moisture = this.biomeMap.getMoisture(rx, rz);
+			const { h, temp, moisture } = this.heightGenerator.getData(rx, rz);
 			const biome = BiomeRegistry.getBiome(h, moisture, temp);
 
 			// Decide species based on biome

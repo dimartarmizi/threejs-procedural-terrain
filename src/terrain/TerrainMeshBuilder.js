@@ -27,11 +27,8 @@ export class TerrainMeshBuilder {
 			const x = vertices[i] + worldOffsetX;
 			const z = vertices[i + 2] + worldOffsetZ;
 
-			const h = this.heightGenerator.getHeight(x, z);
+			const { h, temp, moisture } = this.heightGenerator.getData(x, z);
 			vertices[i + 1] = h;
-
-			const temp = this.biomeMap.getTemperature(x, z);
-			const moisture = this.biomeMap.getMoisture(x, z);
 			
 			const color = BiomeRegistry.getBlendedColor(h, moisture, temp);
 			colors[i] = color.r;

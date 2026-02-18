@@ -179,7 +179,10 @@ export class Engine {
 		const deltaTime = this.clock.getDelta();
 
 		if (this.controls) this.controls.update();
-		if (this.world) this.world.update(deltaTime, this.camera.position);
+		
+		// Use controls target for chunk loading if orbiting, otherwise camera position
+		const focusPosition = this.controls ? this.controls.target : this.camera.position;
+		if (this.world) this.world.update(deltaTime, focusPosition);
 
 		this.renderer.render(this.scene, this.camera);
 		this.stats.end();

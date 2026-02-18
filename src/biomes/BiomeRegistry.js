@@ -81,25 +81,30 @@ export class BiomeRegistry {
 		for (const key in Biomes) {
 			const b = Biomes[key];
 
-			const hDist = height !== null ? Math.abs(height - b.idealHeight) / 50 : 0;
-			const tDist = Math.abs(temperature - b.idealTemp);
-			const mDist = Math.abs(moisture - b.idealMoisture);
+			const hDist = height !== null ? (height - b.idealHeight) / 50 : 0;
+			const tDist = temperature - b.idealTemp;
+			const mDist = moisture - b.idealMoisture;
 
-			// If height is null, we only care about temp and moisture (for height generation)
-			const dist = Math.sqrt(hDist * hDist + tDist * tDist + mDist * mDist) + 0.001;
-			let weight = 1.0 / Math.pow(dist, 4);
+			const distSq = hDist * hDist + tDist * tDist + mDist * mDist + 0.0001;
+			let weight = 1.0 / (distSq * distSq);
 
 			// Special hard constraints only if height is known
 			if (height !== null) {
 				if (height < 2 && b.id !== 'ocean') weight *= 0.01;
-				if (height > 160 && b.id !== 'snow') weight *= 0.01;
+				else if (height > 160 && b.id !== 'snow') weight *= 0.01;
 			}
 
 			weights.push({ biome: b, weight });
 			totalWeight += weight;
 		}
 
-		return weights.map(w => ({ ...w, weight: w.weight / totalWeight }));
+		// Pre-calculate weight factor
+		const invTotalWeight = 1.0 / totalWeight;
+		for (let i = 0; i < weights.length; i++) {
+			weights[i].weight *= invTotalWeight;
+		}
+
+		return weights;
 	}
 
 	static getBlendedColor(height, moisture, temperature) {

@@ -13,6 +13,10 @@ export class HeightGenerator {
 	}
 
 	getHeight(x, z) {
+		return this.getData(x, z).h;
+	}
+
+	getData(x, z) {
 		const hMult = this.settings.terrainHeight || 1;
 		const sMult = this.settings.terrainScale || 1;
 
@@ -25,6 +29,8 @@ export class HeightGenerator {
 		let finalHeight = 0;
 
 		for (const w of weights) {
+			if (w.weight < 0.001) continue; // Optimization: skip negligible biomes
+			
 			const params = w.biome.heightParams;
 			
 			// Base height for this biome
@@ -55,6 +61,10 @@ export class HeightGenerator {
 			finalHeight += h * w.weight;
 		}
 
-		return finalHeight * hMult;
+		return {
+			h: finalHeight * hMult,
+			temp,
+			moisture
+		};
 	}
 }
