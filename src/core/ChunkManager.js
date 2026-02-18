@@ -138,11 +138,7 @@ export class ChunkManager {
 		this.chunks.set(`${x},${z}_${lod}`, { mesh });
 
 		const coordKey = `${x},${z}`;
-		if (lod <= 1) {
-			this.vegetation.spawnForChunk(coordKey, x, z, chunkSize);
-		} else {
-			this.vegetation.removeForChunk(coordKey);
-		}
+		this.vegetation.spawnForChunk(coordKey, x, z, chunkSize);
 	}
 
 	updateSettings(settings) {

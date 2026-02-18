@@ -114,8 +114,10 @@ export class VegetationSystem {
 	spawnForChunk(chunkKey, cx, cz, chunkSize) {
 		if (this.chunkVegetation.has(chunkKey)) return;
 
+		const count = this.settings.treeDensity !== undefined ? this.settings.treeDensity : 50;
+		if (count <= 0) return;
+
 		const rng = new SeededRandom(this.seed + '_' + chunkKey);
-		const count = this.settings.treeDensity || 50;
 
 		const speciesInChunk = new Map();
 

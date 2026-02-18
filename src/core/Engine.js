@@ -17,7 +17,7 @@ export class Engine {
 		this.clock = new THREE.Clock();
 		this.world = null;
 
-		this.settings = {
+		this.defaultSettings = {
 			renderDistance: 3,
 			chunkSize: 128,
 			seed: 'my-world-001',
@@ -35,6 +35,31 @@ export class Engine {
 			cloudScale: 0.0005,
 			shadows: true
 		};
+
+		this.settings = this.loadSettings();
+	}
+
+	loadSettings() {
+		const saved = localStorage.getItem('terrain_engine_settings');
+		if (saved) {
+			try {
+				const parsed = JSON.parse(saved);
+				return { ...this.defaultSettings, ...parsed };
+			} catch (e) {
+				return { ...this.defaultSettings };
+			}
+		}
+		return { ...this.defaultSettings };
+	}
+
+	saveSettings() {
+		localStorage.setItem('terrain_engine_settings', JSON.stringify(this.settings));
+	}
+
+	resetSettings() {
+		this.settings = { ...this.defaultSettings };
+		this.saveSettings();
+		location.reload();
 	}
 
 	init() {
@@ -80,6 +105,18 @@ export class Engine {
 		this.controls = new OrbitControls(this.camera, this.renderer.domElement);
 		this.controls.enableDamping = true;
 		this.controls.dampingFactor = 0.05;
+		this.controls.mouseButtons = {
+			LEFT: THREE.MOUSE.ROTATE,
+			MIDDLE: THREE.MOUSE.DOLLY,
+			RIGHT: THREE.MOUSE.PAN
+		};
+		this.controls.touches = {
+			ONE: THREE.TOUCH.ROTATE,
+			TWO: THREE.TOUCH.DOLLY_PAN
+		};
+		this.controls.screenSpacePanning = false;
+		this.controls.enablePan = true;
+		this.controls.enableZoom = true;
 	}
 
 	setupStats() {
@@ -93,37 +130,47 @@ export class Engine {
 
 		const worldFolder = this.gui.addFolder('World');
 		worldFolder.add(this.settings, 'renderDistance', 1, 10, 1).name('Render Distance').onFinishChange(() => {
+			this.saveSettings();
 			eventBus.emit('settingsChanged', this.settings);
 		});
 		worldFolder.add(this.settings, 'chunkSize', 32, 256, 1).name('Chunk Size').onFinishChange(() => {
+			this.saveSettings();
 			eventBus.emit('settingsChanged', this.settings);
 		});
 		worldFolder.add(this.settings, 'seed').name('Seed').onFinishChange(() => {
+			this.saveSettings();
 			eventBus.emit('settingsChanged', this.settings);
 		});
 
 		const envFolder = this.gui.addFolder('Environment');
 		envFolder.add(this.settings, 'timeScale', 0, 10).name('Time Scale').onChange((v) => {
+			this.settings.timeScale = v;
 			if (this.world) this.world.timeSystem.timeScale = v;
 		});
 		envFolder.add(this.settings, 'waterHeight', 0, 20).name('Water Height').onChange((v) => {
+			this.settings.waterHeight = v;
 			if (this.world && this.world.waterSystem) this.world.waterSystem.water.position.y = v;
 		});
 		envFolder.add(this.settings, 'fogDensity', 0, 0.002).name('Fog Density').onChange((v) => {
+			this.settings.fogDensity = v;
 			this.scene.fog.density = v;
 		});
 
 		const lightFolder = this.gui.addFolder('Lighting');
 		lightFolder.add(this.settings, 'ambientIntensity', 0, 2).name('Ambient').onChange((v) => {
+			this.settings.ambientIntensity = v;
 			if (this.world && this.world.ambientLight) this.world.ambientLight.intensity = v;
 		});
 		lightFolder.add(this.settings, 'sunIntensity', 0, 5).name('Sun Intensity').onChange((v) => {
+			this.settings.sunIntensity = v;
 			if (this.world && this.world.sunLight) this.world.sunLight.intensity = v;
 		});
 		lightFolder.addColor(this.settings, 'sunColor').name('Sun Color').onChange((v) => {
+			this.settings.sunColor = v;
 			if (this.world && this.world.sunLight) this.world.sunLight.color.set(v);
 		});
 		lightFolder.add(this.settings, 'shadows').name('Enable Shadows').onChange((v) => {
+			this.settings.shadows = v;
 			if (this.world && this.world.sunLight) {
 				this.world.sunLight.castShadow = v;
 			}
@@ -131,12 +178,15 @@ export class Engine {
 
 		const terrainFolder = this.gui.addFolder('Terrain Detail');
 		terrainFolder.add(this.settings, 'terrainHeight', 0.1, 3.0).name('Height Mult').onFinishChange(() => {
+			this.saveSettings();
 			eventBus.emit('settingsChanged', this.settings);
 		});
 		terrainFolder.add(this.settings, 'terrainScale', 0.1, 5.0).name('Noise Scale').onFinishChange(() => {
+			this.saveSettings();
 			eventBus.emit('settingsChanged', this.settings);
 		});
 		terrainFolder.add(this.settings, 'treeDensity', 0, 200, 1).name('Tree Density').onFinishChange(() => {
+			this.saveSettings();
 			eventBus.emit('settingsChanged', this.settings);
 		});
 
@@ -155,6 +205,22 @@ export class Engine {
 		skyFolder.add(this.settings, 'cloudScale', 0.0001, 0.002).name('Cloud Scale').onChange((v) => {
 			if (this.world && this.world.skySystem) this.world.skySystem.sky.material.uniforms.cloudScale.value = v;
 		});
+
+		const actionsFolder = this.gui.addFolder('System Actions');
+
+		const saveAction = () => {
+			this.saveSettings();
+			alert('Settings saved');
+		};
+
+		const resetAction = () => {
+			if (confirm('Reset all settings to default and reload?')) {
+				this.resetSettings();
+			}
+		};
+
+		actionsFolder.add({ save: saveAction }, 'save').name('💾 Save Settings');
+		actionsFolder.add({ reset: resetAction }, 'reset').name('🔄 Reset Defaults');
 	}
 
 	setupWorld() {
@@ -177,6 +243,24 @@ export class Engine {
 		const deltaTime = this.clock.getDelta();
 
 		if (this.controls) this.controls.update();
+
+		if (this.world && this.world.chunkManager && this.world.chunkManager.heightGenerator) {
+			const hg = this.world.chunkManager.heightGenerator;
+			const clearance = 2;
+			if (this.controls) {
+				const t = this.controls.target;
+				const terrainY = hg.getHeight(t.x, t.z);
+				const minTargetY = terrainY + clearance;
+				if (t.y < minTargetY) t.y = minTargetY;
+				const minCameraY = terrainY + clearance + 0.5;
+				if (this.camera.position.y < minCameraY) this.camera.position.y = minCameraY;
+			} else {
+				const p = this.camera.position;
+				const terrainY = hg.getHeight(p.x, p.z);
+				const minY = terrainY + clearance;
+				if (p.y < minY) p.y = minY;
+			}
+		}
 
 		const focusPosition = this.controls ? this.controls.target : this.camera.position;
 		if (this.world) this.world.update(deltaTime, focusPosition);
