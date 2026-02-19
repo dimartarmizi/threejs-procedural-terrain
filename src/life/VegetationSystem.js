@@ -21,14 +21,14 @@ export class VegetationSystem {
 		};
 
 		this.geos = {
-			trunk: new THREE.CylinderGeometry(0.15, 0.2, 2, 6).toNonIndexed(),
-			oak: new THREE.IcosahedronGeometry(1.5, 0).toNonIndexed(),
+			trunk: this.ensureNonIndexed(new THREE.CylinderGeometry(0.15, 0.2, 2, 6)),
+			oak: this.ensureNonIndexed(new THREE.IcosahedronGeometry(1.5, 0)),
 			pine: this.createPineFoliage(),
 			palm: this.createPalmFoliage(),
-			poplar: new THREE.CylinderGeometry(0.5, 1.2, 4, 6).toNonIndexed(),
+			poplar: this.ensureNonIndexed(new THREE.CylinderGeometry(0.5, 1.2, 4, 6)),
 			cactus: this.createCactusGeo(),
-			shrub: new THREE.IcosahedronGeometry(0.8, 0).toNonIndexed(),
-			palmTrunk: new THREE.CylinderGeometry(0.1, 0.25, 3.5, 6).toNonIndexed()
+			shrub: this.ensureNonIndexed(new THREE.IcosahedronGeometry(0.8, 0)),
+			palmTrunk: this.ensureNonIndexed(new THREE.CylinderGeometry(0.1, 0.25, 3.5, 6))
 		};
 
 		this.geos.trunk.translate(0, 1, 0);
@@ -41,11 +41,11 @@ export class VegetationSystem {
 	}
 
 	createPineFoliage() {
-		const g1 = new THREE.ConeGeometry(1.5, 2.5, 6).toNonIndexed();
+		const g1 = this.ensureNonIndexed(new THREE.ConeGeometry(1.5, 2.5, 6));
 		g1.translate(0, 2, 0);
-		const g2 = new THREE.ConeGeometry(1.1, 2, 6).toNonIndexed();
+		const g2 = this.ensureNonIndexed(new THREE.ConeGeometry(1.1, 2, 6));
 		g2.translate(0, 3.5, 0);
-		const g3 = new THREE.ConeGeometry(0.7, 1.5, 6).toNonIndexed();
+		const g3 = this.ensureNonIndexed(new THREE.ConeGeometry(0.7, 1.5, 6));
 		g3.translate(0, 4.8, 0);
 		return this.mergeGeometries([g1, g2, g3]);
 	}
@@ -56,18 +56,18 @@ export class VegetationSystem {
 		for (let i = 0; i < numLeaves; i++) {
 			const leafGroup = [];
 
-			const s1 = new THREE.BoxGeometry(1, 0.1, 0.4).toNonIndexed();
+			const s1 = this.ensureNonIndexed(new THREE.BoxGeometry(1, 0.1, 0.4));
 			s1.translate(0.5, 0, 0);
 			s1.rotateZ(0.2);
 			leafGroup.push(s1);
 
-			const s2 = new THREE.BoxGeometry(1, 0.1, 0.35).toNonIndexed();
+			const s2 = this.ensureNonIndexed(new THREE.BoxGeometry(1, 0.1, 0.35));
 			s2.translate(0.5, 0, 0);
 			s2.rotateZ(-0.3);
 			s2.translate(1, 0.2, 0);
 			leafGroup.push(s2);
 
-			const s3 = new THREE.BoxGeometry(1, 0.1, 0.25).toNonIndexed();
+			const s3 = this.ensureNonIndexed(new THREE.BoxGeometry(1, 0.1, 0.25));
 			s3.translate(0.5, 0, 0);
 			s3.rotateZ(-0.6);
 			s3.translate(1.9, -0.1, 0);
@@ -82,15 +82,21 @@ export class VegetationSystem {
 	}
 
 	createCactusGeo() {
-		const g1 = new THREE.CylinderGeometry(0.4, 0.4, 3, 6).toNonIndexed();
+		const g1 = this.ensureNonIndexed(new THREE.CylinderGeometry(0.4, 0.4, 3, 6));
 		g1.translate(0, 1.5, 0);
-		const g2 = new THREE.CylinderGeometry(0.3, 0.3, 1, 6).toNonIndexed();
+		const g2 = this.ensureNonIndexed(new THREE.CylinderGeometry(0.3, 0.3, 1, 6));
 		g2.rotateZ(Math.PI / 2);
 		g2.translate(0.5, 2, 0);
-		const g3 = new THREE.CylinderGeometry(0.3, 0.3, 1, 6).toNonIndexed();
+		const g3 = this.ensureNonIndexed(new THREE.CylinderGeometry(0.3, 0.3, 1, 6));
 		g3.rotateZ(-Math.PI / 2);
 		g3.translate(-0.5, 1.2, 0);
 		return this.mergeGeometries([g1, g2, g3]);
+	}
+
+	ensureNonIndexed(geom) {
+		if (!geom) return geom;
+		if (geom.index) return geom.toNonIndexed();
+		return geom;
 	}
 
 	mergeGeometries(geometries) {
