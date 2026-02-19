@@ -6,6 +6,8 @@ export class SkySystem {
 		this.camera = camera || null;
 		this.sky = null;
 		this.sun = new THREE.Vector3();
+		this.saturationMult = 1.0;
+		this.brightnessMult = 1.0;
 
 		const geo = new THREE.SphereGeometry(5000, 32, 32);
 
@@ -157,12 +159,12 @@ export class SkySystem {
 		const bot = this.sky.material.uniforms.bottomColor.value;
 
 		if (isNight) {
-			top.setHSL(0.6, 1, 0.05);
-			bot.setHSL(0.6, 1, 0.1);
+			top.setHSL(0.6, 1.0 * this.saturationMult, 0.05 * this.brightnessMult);
+			bot.setHSL(0.6, 1.0 * this.saturationMult, 0.1 * this.brightnessMult);
 			this.scene.fog.color.copy(bot);
 		} else {
-			top.setHSL(0.6, 0.8, 0.5 * intensity + 0.1);
-			bot.setHSL(0.5, 0.5, 0.7 * intensity + 0.2);
+			top.setHSL(0.6, 0.8 * this.saturationMult, (0.5 * intensity + 0.1) * this.brightnessMult);
+			bot.setHSL(0.5, 0.5 * this.saturationMult, (0.7 * intensity + 0.2) * this.brightnessMult);
 			this.scene.fog.color.copy(bot);
 		}
 

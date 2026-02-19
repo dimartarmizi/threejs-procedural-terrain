@@ -4,6 +4,7 @@ import { eventBus } from './EventBus.js';
 import { TimeSystem } from '../environment/TimeSystem.js';
 import { SkySystem } from '../environment/SkySystem.js';
 import { WaterSystem } from '../environment/WaterSystem.js';
+import { WeatherSystem } from '../environment/WeatherSystem.js';
 import { BiomeMap } from '../terrain/BiomeMap.js';
 import { BiomeRegistry } from '../biomes/BiomeRegistry.js';
 
@@ -18,6 +19,7 @@ export class World {
 		this.timeSystem = new TimeSystem();
 		this.skySystem = null;
 		this.waterSystem = null;
+		this.weatherSystem = null;
 		this.biomeMap = new BiomeMap(settings.seed);
 	}
 
@@ -51,6 +53,11 @@ export class World {
 	setupEnvironment() {
 		this.skySystem = new SkySystem(this.scene, this.camera);
 		this.waterSystem = new WaterSystem(this.scene);
+		this.weatherSystem = new WeatherSystem(this.scene, this.camera, this.skySystem);
+		
+		if (this.settings.weather) {
+			this.weatherSystem.setWeather(this.settings.weather);
+		}
 	}
 
 	setupChunkManager() {
@@ -62,12 +69,20 @@ export class World {
 			this.settings = newSettings;
 			this.biomeMap = new BiomeMap(newSettings.seed);
 			this.chunkManager.updateSettings(newSettings);
+			
+			if (this.weatherSystem && newSettings.weather) {
+				this.weatherSystem.setWeather(newSettings.weather);
+			}
 		});
 	}
 
 	update(deltaTime, playerPosition) {
 		const time = this.timeSystem.update(deltaTime);
 		const env = this.skySystem.update(time, deltaTime);
+
+		if (this.weatherSystem) {
+			this.weatherSystem.update(deltaTime, playerPosition);
+		}
 
 		const sunDist = 500;
 		this.sunLight.position.set(
@@ -76,7 +91,12 @@ export class World {
 			playerPosition.z + env.sunDirection.z * sunDist
 		);
 		this.sunLight.target.position.copy(playerPosition);
-		this.sunLight.intensity = env.sunIntensity;
+		
+		let sunIntensity = env.sunIntensity;
+		if (this.weatherSystem) {
+			sunIntensity *= this.weatherSystem.getSunIntensityModifier();
+		}
+		this.sunLight.intensity = sunIntensity;
 
 		if (this.chunkManager) {
 			this.chunkManager.update(playerPosition);

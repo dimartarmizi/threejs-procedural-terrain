@@ -39,7 +39,8 @@ export class Engine {
 			cloudBase: 120,
 			cloudThickness: 80,
 			shadows: true,
-			firstPerson: false
+			firstPerson: false,
+			weather: 'clear'
 		};
 
 		this.settings = this.loadSettings();
@@ -196,6 +197,18 @@ export class Engine {
 		envFolder.add(this.settings, 'fogDensity', 0, 0.002).name('Fog Density').onChange((v) => {
 			this.settings.fogDensity = v;
 			this.scene.fog.density = v;
+		});
+		envFolder.add(this.settings, 'weather', {
+			'Clear': 'clear',
+			'Cloudy': 'cloudy',
+			'Rain': 'rain',
+			'BadStorm': 'storm',
+			'Snow': 'snow',
+			'Foggy': 'foggy'
+		}).name('Weather').onChange((v) => {
+			this.settings.weather = v;
+			this.saveSettings();
+			eventBus.emit('settingsChanged', this.settings);
 		});
 
 		const lightFolder = this.gui.addFolder('Lighting');
