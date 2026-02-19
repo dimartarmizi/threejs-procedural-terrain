@@ -70,15 +70,26 @@ export class SkySystem {
 					return v;
 				}
 
-				vec3 skyColorForDir(vec3 dir) {
+				vec3 skyColorForDir(vec3 dir, vec3 sunDir) {
 					float h = max(dir.y, 0.0);
 					float t = pow(h, 0.6);
-					return mix(bottomColor, topColor, t);
+					vec3 base = mix(bottomColor, topColor, t);
+					
+					float sunDot = max(dot(dir, normalize(sunDir)), 0.0);
+					float sunGlow = pow(sunDot, 16.0);
+					float sunDisk = pow(sunDot, 800.0);
+					
+					vec3 sunColor = vec3(1.0, 0.9, 0.7);
+					if (sunDir.y < 0.2) {
+						sunColor = mix(vec3(1.0, 0.3, 0.1), vec3(1.0, 0.9, 0.7), clamp(sunDir.y * 5.0, 0.0, 1.0));
+					}
+					
+					return base + sunGlow * sunColor * 0.4 + sunDisk * sunColor;
 				}
 
 				void main() {
 					vec3 viewDir = normalize(vWorldPosition - cameraPos);
-					vec3 sky = skyColorForDir(viewDir);
+					vec3 sky = skyColorForDir(viewDir, sunDirection);
 
 					float tNear = 0.0;
 					float tFar = 4000.0;
@@ -108,7 +119,7 @@ export class SkySystem {
 					vec3 accumColor = vec3(0.0);
 					float accumAlpha = 0.0;
 
-					vec3 sunDir = normalize(sunDirection);
+					vec3 sunDirNorm = normalize(sunDirection);
 
 					for (int i = 0; i < STEPS; i++) {
 						vec3 pos = ro + rd * (t + step * 0.5);
@@ -118,9 +129,13 @@ export class SkySystem {
 						float density = smoothstep(0.2, 0.8, v) * cloudIntensity * cloudCoverage * (1.0 - abs(heightNorm - 0.5) * 2.0);
 						density = clamp(density, 0.0, 1.0);
 
-						float light = clamp(dot(normalize(sunDir), -rd), 0.0, 1.0);
-						float phase = 0.5 + 0.5 * light;
-						vec3 sampleColor = vec3(1.0) * phase;
+						float light = clamp(dot(sunDirNorm, vec3(0.0, 1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
+						vec3 sampleColor = vec3(1.0) * light;
+						
+						if (sunDirNorm.y < 0.3) {
+							vec3 sunsetCloud = vec3(1.0, 0.6, 0.3);
+							sampleColor = mix(sunsetCloud, sampleColor, clamp(sunDirNorm.y * 3.3, 0.0, 1.0));
+						}
 
 						float alpha = density * 0.12;
 						alpha = clamp(alpha, 0.0, 1.0);
@@ -150,29 +165,44 @@ export class SkySystem {
 			this.sky.material.uniforms.cameraPos.value.copy(this.camera.position);
 		}
 
-		const angle = (time / 24) * Math.PI * 2 - Math.PI / 2;
-		this.sun.set(Math.cos(angle), Math.sin(angle), 0.5).normalize();
-		const isNight = time < 6 || time > 18;
-		const intensity = isNight ? 0.1 : Math.sin((time - 6) / 12 * Math.PI);
+		const angle = ((time - 12) / 12) * Math.PI;
+		this.sun.set(Math.sin(angle), Math.cos(angle), -0.3).normalize();
 
+		const sunY = this.sun.y;
 		const top = this.sky.material.uniforms.topColor.value;
 		const bot = this.sky.material.uniforms.bottomColor.value;
 
-		if (isNight) {
-			top.setHSL(0.6, 1.0 * this.saturationMult, 0.05 * this.brightnessMult);
-			bot.setHSL(0.6, 1.0 * this.saturationMult, 0.1 * this.brightnessMult);
-			this.scene.fog.color.copy(bot);
+		if (sunY > 0.5) {
+			top.setHSL(0.6, 0.7 * this.saturationMult, 0.4 * this.brightnessMult);
+			bot.setHSL(0.55, 0.6 * this.saturationMult, 0.6 * this.brightnessMult);
+		} else if (sunY > 0.0) {
+			const t = sunY / 0.5;
+			const targetTop = new THREE.Color().setHSL(0.6, 0.7 * this.saturationMult, 0.4 * this.brightnessMult);
+			const targetBot = new THREE.Color().setHSL(0.55, 0.6 * this.saturationMult, 0.6 * this.brightnessMult);
+			const dawnTop = new THREE.Color().setHSL(0.65, 0.5 * this.saturationMult, 0.2 * this.brightnessMult);
+			const dawnBot = new THREE.Color().setHSL(0.05, 0.8 * this.saturationMult, 0.5 * this.brightnessMult);
+			top.lerpColors(dawnTop, targetTop, t);
+			bot.lerpColors(dawnBot, targetBot, t);
+		} else if (sunY > -0.2) {
+			const t = (sunY + 0.2) / 0.2;
+			const nightTop = new THREE.Color(0x020205).multiplyScalar(this.brightnessMult);
+			const nightBot = new THREE.Color(0x050510).multiplyScalar(this.brightnessMult);
+			const dawnTop = new THREE.Color().setHSL(0.65, 0.5 * this.saturationMult, 0.2 * this.brightnessMult);
+			const dawnBot = new THREE.Color().setHSL(0.05, 0.8 * this.saturationMult, 0.5 * this.brightnessMult);
+			top.lerpColors(nightTop, dawnTop, t);
+			bot.lerpColors(nightBot, dawnBot, t);
 		} else {
-			top.setHSL(0.6, 0.8 * this.saturationMult, (0.5 * intensity + 0.1) * this.brightnessMult);
-			bot.setHSL(0.5, 0.5 * this.saturationMult, (0.7 * intensity + 0.2) * this.brightnessMult);
-			this.scene.fog.color.copy(bot);
+			top.set(0x020205).multiplyScalar(this.brightnessMult);
+			bot.set(0x050510).multiplyScalar(this.brightnessMult);
 		}
+
+		this.scene.fog.color.copy(bot);
 
 		if (this.sky.material.uniforms.sunDirection) this.sky.material.uniforms.sunDirection.value.copy(this.sun);
 
 		return {
 			sunDirection: this.sun,
-			sunIntensity: intensity
+			sunIntensity: Math.max(0, sunY)
 		};
 	}
 }

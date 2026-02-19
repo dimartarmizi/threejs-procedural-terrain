@@ -16,11 +16,21 @@ export class World {
 		this.chunkManager = null;
 		this.ambientLight = null;
 		this.sunLight = null;
-		this.timeSystem = new TimeSystem();
+		this.timeSystem = new TimeSystem(settings.useRealTime, settings.time || 12.0);
+		this.timeSystem.timeScale = settings.timeScale || 1.0;
 		this.skySystem = null;
 		this.waterSystem = null;
 		this.weatherSystem = null;
 		this.biomeMap = new BiomeMap(settings.seed);
+
+		this.lastTerrainSettings = {
+			seed: settings.seed,
+			terrainHeight: settings.terrainHeight,
+			terrainScale: settings.terrainScale,
+			treeDensity: settings.treeDensity,
+			chunkSize: settings.chunkSize,
+			renderDistance: settings.renderDistance
+		};
 	}
 
 	init() {
@@ -54,7 +64,7 @@ export class World {
 		this.skySystem = new SkySystem(this.scene, this.camera);
 		this.waterSystem = new WaterSystem(this.scene);
 		this.weatherSystem = new WeatherSystem(this.scene, this.camera, this.skySystem);
-		
+
 		if (this.settings.weather) {
 			this.weatherSystem.setWeather(this.settings.weather);
 		}
@@ -66,10 +76,28 @@ export class World {
 
 	setupEventListeners() {
 		eventBus.on('settingsChanged', (newSettings) => {
-			this.settings = newSettings;
-			this.biomeMap = new BiomeMap(newSettings.seed);
-			this.chunkManager.updateSettings(newSettings);
-			
+			const terrainChanged =
+				this.lastTerrainSettings.seed !== newSettings.seed ||
+				this.lastTerrainSettings.terrainHeight !== newSettings.terrainHeight ||
+				this.lastTerrainSettings.terrainScale !== newSettings.terrainScale ||
+				this.lastTerrainSettings.treeDensity !== newSettings.treeDensity ||
+				this.lastTerrainSettings.chunkSize !== newSettings.chunkSize ||
+				this.lastTerrainSettings.renderDistance !== newSettings.renderDistance;
+
+			if (terrainChanged) {
+				this.lastTerrainSettings = {
+					seed: newSettings.seed,
+					terrainHeight: newSettings.terrainHeight,
+					terrainScale: newSettings.terrainScale,
+					treeDensity: newSettings.treeDensity,
+					chunkSize: newSettings.chunkSize,
+					renderDistance: newSettings.renderDistance
+				};
+
+				this.biomeMap = new BiomeMap(newSettings.seed);
+				this.chunkManager.updateSettings(newSettings);
+			}
+
 			if (this.weatherSystem && newSettings.weather) {
 				this.weatherSystem.setWeather(newSettings.weather);
 			}
@@ -78,6 +106,7 @@ export class World {
 
 	update(deltaTime, playerPosition) {
 		const time = this.timeSystem.update(deltaTime);
+		this.settings.time = Math.round(time * 100) / 100;
 		const env = this.skySystem.update(time, deltaTime);
 
 		if (this.weatherSystem) {
@@ -91,7 +120,7 @@ export class World {
 			playerPosition.z + env.sunDirection.z * sunDist
 		);
 		this.sunLight.target.position.copy(playerPosition);
-		
+
 		let sunIntensity = env.sunIntensity;
 		if (this.weatherSystem) {
 			sunIntensity *= this.weatherSystem.getSunIntensityModifier();

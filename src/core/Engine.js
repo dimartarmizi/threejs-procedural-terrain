@@ -23,7 +23,9 @@ export class Engine {
 			renderDistance: 3,
 			chunkSize: 128,
 			seed: 'my-world-001',
+			time: 12.0,
 			timeScale: 1.0,
+			useRealTime: false,
 			waterHeight: 5,
 			terrainHeight: 1.0,
 			terrainScale: 1.0,
@@ -189,6 +191,16 @@ export class Engine {
 		});
 
 		const envFolder = this.gui.addFolder('Environment');
+		envFolder.add(this.settings, 'useRealTime').name('Real-time sync').onChange((v) => {
+			this.settings.useRealTime = v;
+			if (this.world) this.world.timeSystem.useRealTime = v;
+		});
+		this.timeController = envFolder.add(this.settings, 'time', 0, 24, 0.01).name('Set Time (0-24)').onChange((v) => {
+			this.settings.time = v;
+			if (this.world && !this.settings.useRealTime) {
+				this.world.timeSystem.setTime(v);
+			}
+		}).listen();
 		envFolder.add(this.settings, 'timeScale', 0, 10).name('Time Scale').onChange((v) => {
 			this.settings.timeScale = v;
 			if (this.world) this.world.timeSystem.timeScale = v;
@@ -205,7 +217,7 @@ export class Engine {
 			'Clear': 'clear',
 			'Cloudy': 'cloudy',
 			'Rain': 'rain',
-			'BadStorm': 'storm',
+			'Storm': 'storm',
 			'Snow': 'snow',
 			'Foggy': 'foggy'
 		}).name('Weather').onChange((v) => {
