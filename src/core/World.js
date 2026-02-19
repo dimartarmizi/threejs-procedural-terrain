@@ -49,7 +49,7 @@ export class World {
 	}
 
 	setupEnvironment() {
-		this.skySystem = new SkySystem(this.scene);
+		this.skySystem = new SkySystem(this.scene, this.camera);
 		this.waterSystem = new WaterSystem(this.scene);
 	}
 

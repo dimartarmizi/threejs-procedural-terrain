@@ -33,6 +33,9 @@ export class Engine {
 			sunColor: '#ffffff',
 			cloudIntensity: 0.5,
 			cloudScale: 0.0005,
+			cloudCoverage: 0.6,
+			cloudBase: 120,
+			cloudThickness: 80,
 			shadows: true
 		};
 
@@ -204,6 +207,21 @@ export class Engine {
 		});
 		skyFolder.add(this.settings, 'cloudScale', 0.0001, 0.002).name('Cloud Scale').onChange((v) => {
 			if (this.world && this.world.skySystem) this.world.skySystem.sky.material.uniforms.cloudScale.value = v;
+		});
+
+		skyFolder.add(this.settings, 'cloudCoverage', 0, 1).name('Cloud Coverage').onChange((v) => {
+			this.settings.cloudCoverage = v;
+			if (this.world && this.world.skySystem) this.world.skySystem.sky.material.uniforms.cloudCoverage.value = v;
+		});
+
+		skyFolder.add(this.settings, 'cloudBase', 0, 1000).name('Cloud Base').onChange((v) => {
+			this.settings.cloudBase = v;
+			if (this.world && this.world.skySystem) this.world.skySystem.sky.material.uniforms.cloudBase.value = v;
+		});
+
+		skyFolder.add(this.settings, 'cloudThickness', 1, 500).name('Cloud Thickness').onChange((v) => {
+			this.settings.cloudThickness = v;
+			if (this.world && this.world.skySystem) this.world.skySystem.sky.material.uniforms.cloudThickness.value = v;
 		});
 
 		const actionsFolder = this.gui.addFolder('System Actions');
