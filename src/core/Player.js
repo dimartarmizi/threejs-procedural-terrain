@@ -119,8 +119,21 @@ export class Player {
 		if (this.moveForward || this.moveBackward) this.velocity.z -= this.direction.z * this.speed * deltaTime;
 		if (this.moveLeft || this.moveRight) this.velocity.x -= this.direction.x * this.speed * deltaTime;
 
+		const oldX = this.camera.position.x;
+		const oldZ = this.camera.position.z;
+
 		this.controls.moveRight(-this.velocity.x * deltaTime);
 		this.controls.moveForward(-this.velocity.z * deltaTime);
+
+		if (this.world && this.world.chunkManager && this.world.chunkManager.vegetation) {
+			if (this.world.chunkManager.vegetation.checkCollision(this.camera.position.x, this.camera.position.z, 0.5)) {
+				this.camera.position.x = oldX;
+				this.camera.position.z = oldZ;
+
+				this.velocity.x = 0;
+				this.velocity.z = 0;
+			}
+		}
 
 		this.camera.position.y += this.velocity.y * deltaTime;
 

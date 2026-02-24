@@ -38,6 +38,7 @@ export class VegetationSystem {
 		this.geos.palmTrunk.translate(0, 1.75, 0);
 
 		this.chunkVegetation = new Map();
+		this.colliders = new Map();
 	}
 
 	createPineFoliage() {
@@ -126,6 +127,7 @@ export class VegetationSystem {
 		const rng = new SeededRandom(this.seed + '_' + chunkKey);
 
 		const speciesInChunk = new Map();
+		const chunkColliders = [];
 
 		const matrix = new THREE.Matrix4();
 		const position = new THREE.Vector3();
@@ -186,10 +188,18 @@ export class VegetationSystem {
 
 				if (!isShrub && !isCactus) {
 					data.trunks.setMatrixAt(data.count, matrix);
+					chunkColliders.push({ x: rx, z: rz, r: 0.3 * s });
+				} else if (isCactus) {
+					chunkColliders.push({ x: rx, z: rz, r: 0.4 * s });
 				}
+
 				data.leaves.setMatrixAt(data.count, matrix);
 				data.count++;
 			}
+		}
+
+		if (chunkColliders.length > 0) {
+			this.colliders.set(chunkKey, chunkColliders);
 		}
 
 		const allMeshes = [];
@@ -218,6 +228,32 @@ export class VegetationSystem {
 			});
 			this.chunkVegetation.delete(chunkKey);
 		}
+		this.colliders.delete(chunkKey);
+	}
+
+	checkCollision(px, pz, radius) {
+		const chunkSize = this.settings.chunkSize || 32;
+		const cx = Math.floor(px / chunkSize);
+		const cz = Math.floor(pz / chunkSize);
+
+		for (let x = -1; x <= 1; x++) {
+			for (let z = -1; z <= 1; z++) {
+				const key = `${cx + x},${cz + z}`;
+				const objects = this.colliders.get(key);
+				if (objects) {
+					for (const obj of objects) {
+						const dx = px - obj.x;
+						const dz = pz - obj.z;
+						const distSq = dx * dx + dz * dz;
+						const minDist = radius + obj.r;
+						if (distSq < minDist * minDist) {
+							return true;
+						}
+					}
+				}
+			}
+		}
+		return false;
 	}
 
 	clearAll() {
@@ -225,5 +261,6 @@ export class VegetationSystem {
 			this.removeForChunk(key);
 		}
 		this.chunkVegetation.clear();
+		this.colliders.clear();
 	}
 }
