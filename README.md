@@ -1,62 +1,80 @@
-# Procedural Infinite Terrain Engine
 
-A high-performance, aesthetically pleasing infinite procedural terrain engine built with **Three.js** and **Vanilla JavaScript**. This project features a multi-biome ecosystem, dynamic environment systems, and optimized GPU-based rendering.
+<p align="center">
+  <img src="public/logo.webp" alt="Three.js Procedural Terrain" width="192">
+</p>
 
-## 🌟 Key Features
+# Three.js Procedural Terrain
 
--   **Infinite World**: Automated chunk management system that loads and unloads terrain chunks based on camera movement.
--   **Multi-Biome Ecosystem**: Includes Forest, Desert, Snow, Mountains, Plains, Beach, and Ocean biomes with smooth color transitions.
--   **Dynamic Environment**: 
-    -   24-hour Day/Night cycle.
-    -   Dynamic sun position, light intensity, and sky colors.
-    -   Animated cloud system and realistic fog.
--   **Varied Vegetation**:
-    -   Multiple tree species (Oak, Pine, Palm, Poplar, Cactus, Shrubs) distributed intelligently by biome.
-    -   Efficient rendering using `InstancedMesh` for high-density forests.
--   **Technical Optimizations**:
-    -   **Level of Detail (LOD)**: Terrain vertex resolution decreases with distance to maintain 60 FPS.
-    -   **GPU Instancing**: Vegetation is rendered in batches to minimize draw calls.
-    -   **Real-time Shadows**: Dynamic shadow system that follows the player for consistent depth.
--   **Interactive GUI**: Real-time controls for:
-    -   World Seed and Render Distance.
-    -   Time Scale and Environmental density.
-    -   Lighting and Shadow toggles.
-    -   Water height and color.
+[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML) [![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript) [![simplex-noise](https://img.shields.io/badge/simplex--noise-FF6CBF?style=for-the-badge&logo=npm&logoColor=white)](https://www.npmjs.com/package/simplex-noise) [![Three.js](https://img.shields.io/badge/Three.js-000000?style=for-the-badge&logo=three.js&logoColor=white)](https://threejs.org/) [![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 
-## 🚀 Getting Started
+Three.js Procedural Terrain is a lightweight, client-side project for generating and exploring procedurally generated landscapes directly in the browser. It provides a chunked terrain pipeline, biome-driven surface rules, modular environment systems (sky, time, weather, water), and a simple vegetation/life system. Useful for demos, experiments, and small games.
+
+![Preview](public/screenshot.webp)
+
+## 🚀 Key Features
+
+- **Chunked Streaming World**: Create and unload terrain chunks on demand for efficient memory and CPU usage.
+- **Layered Noise Heightmaps**: Configurable noise layers produce varied mountains, plains, and valleys.
+- **Biome Mapping**: Register biomes and generate biome-aware surface properties and colors.
+- **Terrain Mesh Builder**: Generates per-chunk vertex data suitable for canvas/WebGL rendering.
+- **Modular Environment Systems**: Time-of-day, sky rendering, weather, and water systems decoupled from core logic.
+- **Vegetation System**: Procedural placement and simple updates for foliage and props.
+- **Player & Camera**: First-person style movement and camera controls for exploration.
+
+## 🛠️ Tech Stack
+
+- Vanilla JavaScript (ES Modules).
+- Vite for development and bundling.
+- Canvas / WebGL rendering via lightweight engine code.
+- Simple deterministic randomness via a seeded RNG.
+
+## 📦 Getting Started
+
+Follow these steps to get a local copy up and running.
 
 ### Prerequisites
 
--   [Node.js](https://nodejs.org/) (v16.x or later recommended)
--   npm (comes with Node.js)
+* **Node.js**: Version 18.0.0 or higher
+* **npm**: Usually comes with Node.js
 
-### Installation
+### Installation & Setup
 
-1.  Clone or download this repository.
-2.  Open a terminal in the project directory.
-3.  Install dependencies:
-    ```bash
-    npm install
-    ```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/dimartarmizi/threejs-procedural-terrain.git
+   cd threejs-procedural-terrain
+   ```
 
-### Running Locally
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-To start the development server with hot-module replacement:
-```bash
-npm run dev
-```
-The application will usually be available at `http://localhost:5173`.
+3. **Start development server**
+   ```bash
+   npm run dev
+   ```
+   The app will be available at `http://localhost:5173`.
 
-## 🛠 Tech Stack
+4. **Build for production**
+   ```bash
+   npm run build
+   ```
+   Optimized files will be generated in the `dist/` folder.
 
--   **Core**: [Three.js](https://threejs.org/) (3D Engine)
--   **Logic**: Vanilla JavaScript (ES6+)
--   **Noise**: Simplex Noise for terrain and biome generation.
--   **UI**: [lil-gui](https://georgealways.github.io/lil-gui/) for the debug panel.
--   **Build Tool**: [Vite](https://vitejs.dev/)
+## 📜 Technical Overview
 
-## 🎨 Acknowledgments
+1. `src/core/Engine.js` — application bootstrap, system orchestration, and main loop.
+2. `src/terrain/Noise.js` & `src/terrain/HeightGenerator.js` — multi-layer noise and heightmap generation.
+3. `src/terrain/TerrainMeshBuilder.js` — converts height data into renderable mesh data per chunk.
+4. `src/biomes/BiomeRegistry.js` & `src/terrain/BiomeMap.js` — registers and maps biome rules to terrain.
+5. `src/environment/*` — separate systems for sky, time, water, and weather effects.
+6. `src/life/VegetationSystem.js` — procedural placement and simple runtime updates for vegetation.
 
--   Built as a showcase for procedural world generation.
--   Low-poly aesthetics inspired by modern stylized 3D games.
--   Special thanks to the Three.js community.
+## 📧 Contact
+
+If you have any questions, suggestions, or just want to reach out, feel free to contact me at [dimartarmizi@gmail.com](mailto:dimartarmizi@gmail.com).
+
+## ⚖️ License
+
+This project is open-source and available under the [MIT License](LICENSE).
