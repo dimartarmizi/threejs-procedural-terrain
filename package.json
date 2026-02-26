@@ -1,7 +1,7 @@
 {
-	"name": "procedural-terrain",
+	"name": "threejs-procedural-terrain",
 	"private": true,
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
@@ -14,7 +14,6 @@
 	"dependencies": {
 		"three": "^0.160.0",
 		"lil-gui": "^0.19.0",
-		"simplex-noise": "^4.0.1",
-		"stats.js": "^0.17.0"
+		"simplex-noise": "^4.0.1"
 	}
 }

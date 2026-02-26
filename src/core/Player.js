@@ -17,9 +17,30 @@ export class Player {
 		this.moveRight = false;
 		this.canJump = false;
 
+		this.sprinting = false;
+		this.sprintMultiplier = 1.35;
+
+		this.baseFov = (camera && camera.fov) ? camera.fov : 75;
+		this.sprintFov = this.baseFov + 6;
+		this.fovSmooth = 8.0;
+
+		this.bobTime = 0;
+		this.bobAmplitudeWalk = 0.0025;
+		this.bobAmplitudeSprint = 0.009;
+		this.bobFrequencyWalk = 6.5;
+		this.bobFrequencySprint = 8.0;
+		this.rollAmplitudeWalk = 0.0015;
+		this.rollAmplitudeSprint = 0.0025;
+		this.pitchAmplitudeWalk = 0.001;
+		this.pitchAmplitudeSprint = 0.002;
+		this._lastBobRoll = 0;
+		this._lastBobPitch = 0;
+
 		this.height = 1.8;
 		this.speed = 120.0;
 		this.jumpForce = 18.0;
+
+		this.maxSlopeAngle = 60;
 
 		this.initEventListeners();
 	}
@@ -47,6 +68,10 @@ export class Player {
 					if (this.canJump === true) this.velocity.y += this.jumpForce;
 					this.canJump = false;
 					break;
+				case 'ShiftLeft':
+				case 'ShiftRight':
+					this.sprinting = true;
+					break;
 			}
 		};
 
@@ -67,6 +92,10 @@ export class Player {
 				case 'ArrowRight':
 				case 'KeyD':
 					this.moveRight = false;
+					break;
+				case 'ShiftLeft':
+				case 'ShiftRight':
+					this.sprinting = false;
 					break;
 			}
 		};
@@ -116,8 +145,9 @@ export class Player {
 		this.direction.x = Number(this.moveRight) - Number(this.moveLeft);
 		this.direction.normalize();
 
-		if (this.moveForward || this.moveBackward) this.velocity.z -= this.direction.z * this.speed * deltaTime;
-		if (this.moveLeft || this.moveRight) this.velocity.x -= this.direction.x * this.speed * deltaTime;
+		const currentSpeed = this.speed * (this.sprinting ? this.sprintMultiplier : 1.0);
+		if (this.moveForward || this.moveBackward) this.velocity.z -= this.direction.z * currentSpeed * deltaTime;
+		if (this.moveLeft || this.moveRight) this.velocity.x -= this.direction.x * currentSpeed * deltaTime;
 
 		const oldX = this.camera.position.x;
 		const oldZ = this.camera.position.z;
@@ -138,16 +168,65 @@ export class Player {
 		this.camera.position.y += this.velocity.y * deltaTime;
 
 		if (this.world && this.world.chunkManager && this.world.chunkManager.heightGenerator) {
-			const terrainHeight = this.world.chunkManager.heightGenerator.getHeight(
-				this.camera.position.x,
-				this.camera.position.z
-			);
+			const hg = this.world.chunkManager.heightGenerator;
+			let terrainHeight = hg.getHeight(this.camera.position.x, this.camera.position.z);
+			const oldTerrainHeight = hg.getHeight(oldX, oldZ);
+
+			const dx = this.camera.position.x - oldX;
+			const dz = this.camera.position.z - oldZ;
+			const horiz = Math.sqrt(dx * dx + dz * dz) || 1e-6;
+			const deltaH = terrainHeight - oldTerrainHeight;
+			const slopeRad = Math.atan2(deltaH, horiz);
+			const maxSlopeRad = THREE.MathUtils.degToRad(this.maxSlopeAngle || 60);
+
+			if (slopeRad > maxSlopeRad) {
+				this.camera.position.x = oldX;
+				this.camera.position.z = oldZ;
+				this.velocity.x = 0;
+				this.velocity.z = 0;
+				terrainHeight = oldTerrainHeight;
+			}
 
 			if (this.camera.position.y < terrainHeight + this.height) {
 				this.velocity.y = 0;
 				this.camera.position.y = terrainHeight + this.height;
 				this.canJump = true;
 			}
+
+			const baseY = this.camera.position.y;
+			const isMoving = this.moveForward || this.moveBackward || this.moveLeft || this.moveRight;
+			const movementFactor = this.direction.length();
+			const freq = this.sprinting ? this.bobFrequencySprint : this.bobFrequencyWalk;
+			const amp = this.sprinting ? this.bobAmplitudeSprint : this.bobAmplitudeWalk;
+			const rollAmp = this.sprinting ? this.rollAmplitudeSprint : this.rollAmplitudeWalk;
+			const pitchAmp = this.sprinting ? this.pitchAmplitudeSprint : this.pitchAmplitudeWalk;
+
+			if (isMoving && this.canJump) {
+				this.bobTime += deltaTime * freq * (movementFactor || 1.0);
+			} else {
+				this.bobTime += deltaTime * (freq * 0.5);
+			}
+
+			const moveLerp = isMoving ? 1.0 : Math.max(0, 1.0 - deltaTime * 8.0);
+			const verticalBob = Math.sin(this.bobTime) * amp * moveLerp;
+
+			this.camera.position.y = baseY + (this.canJump ? verticalBob : 0);
+
+			this.camera.rotation.z -= this._lastBobRoll;
+			this.camera.rotation.x -= this._lastBobPitch;
+
+			const roll = Math.sin(this.bobTime) * rollAmp * movementFactor * moveLerp;
+			const pitch = Math.cos(this.bobTime * 2.0) * pitchAmp * movementFactor * moveLerp;
+
+			this.camera.rotation.z += roll;
+			this.camera.rotation.x += pitch;
+
+			this._lastBobRoll = roll;
+			this._lastBobPitch = pitch;
 		}
+		const targetFov = this.sprinting ? this.sprintFov : this.baseFov;
+		const fovT = 1 - Math.exp(-this.fovSmooth * deltaTime);
+		this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, fovT);
+		this.camera.updateProjectionMatrix();
 	}
 }

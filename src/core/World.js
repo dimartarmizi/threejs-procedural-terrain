@@ -31,6 +31,10 @@ export class World {
 			chunkSize: settings.chunkSize,
 			renderDistance: settings.renderDistance
 		};
+
+		this.lastTerrainSettings.noiseIntensity = settings.noiseIntensity;
+		this.lastTerrainSettings.noiseScale = settings.noiseScale;
+		this.lastTerrainSettings.noiseEnabled = typeof settings.noiseEnabled === 'boolean' ? settings.noiseEnabled : true;
 	}
 
 	init() {
@@ -62,7 +66,7 @@ export class World {
 
 	setupEnvironment() {
 		this.skySystem = new SkySystem(this.scene, this.camera);
-		this.waterSystem = new WaterSystem(this.scene);
+		this.waterSystem = new WaterSystem(this.scene, this.settings.waterHeight || 6);
 		this.weatherSystem = new WeatherSystem(this.scene, this.camera, this.skySystem);
 
 		if (this.settings.weather) {
@@ -98,6 +102,18 @@ export class World {
 				this.chunkManager.updateSettings(newSettings);
 			}
 
+			const noiseChanged =
+				this.lastTerrainSettings.noiseIntensity !== newSettings.noiseIntensity ||
+				this.lastTerrainSettings.noiseScale !== newSettings.noiseScale ||
+				this.lastTerrainSettings.noiseEnabled !== newSettings.noiseEnabled;
+
+			if (noiseChanged && this.chunkManager) {
+				this.chunkManager.updateNoiseSettings(newSettings);
+				this.lastTerrainSettings.noiseIntensity = newSettings.noiseIntensity;
+				this.lastTerrainSettings.noiseScale = newSettings.noiseScale;
+				this.lastTerrainSettings.noiseEnabled = newSettings.noiseEnabled;
+			}
+
 			if (this.weatherSystem && newSettings.weather) {
 				this.weatherSystem.setWeather(newSettings.weather);
 			}
@@ -121,7 +137,9 @@ export class World {
 		);
 		this.sunLight.target.position.copy(playerPosition);
 
-		let sunIntensity = env.sunIntensity;
+		let sunIntensity = env.sunIntensity || 0;
+		const userSun = (this.settings && typeof this.settings.sunIntensity === 'number') ? this.settings.sunIntensity : 1.0;
+		sunIntensity *= userSun;
 		if (this.weatherSystem) {
 			sunIntensity *= this.weatherSystem.getSunIntensityModifier();
 		}

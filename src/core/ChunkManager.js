@@ -9,7 +9,7 @@ export class ChunkManager {
 		this.settings = settings;
 		this.chunks = new Map();
 		this.heightGenerator = new HeightGenerator(settings.seed, settings);
-		this.meshBuilder = new TerrainMeshBuilder(this.heightGenerator, settings.seed);
+		this.meshBuilder = new TerrainMeshBuilder(this.heightGenerator, settings.seed, settings);
 		this.vegetation = new VegetationSystem(scene, this.heightGenerator, settings.seed, settings);
 		this.activeChunks = new Set();
 
@@ -130,9 +130,11 @@ export class ChunkManager {
 	createChunk(x, z, lod = 0) {
 		const { chunkSize } = this.settings;
 		const resolutions = [128, 64, 32];
-		const resolution = resolutions[lod];
+		const resolution = this.settings.chunkResolution || resolutions[lod];
 
 		const mesh = this.meshBuilder.build(x, z, chunkSize, resolution);
+		mesh.userData = mesh.userData || {};
+		mesh.userData.chunkSize = chunkSize;
 		mesh.position.set(x * chunkSize, 0, z * chunkSize);
 		this.scene.add(mesh);
 		this.chunks.set(`${x},${z}_${lod}`, { mesh });
@@ -145,7 +147,7 @@ export class ChunkManager {
 		this.settings = settings;
 		this.updateThreshold = settings.chunkSize / 8;
 		this.heightGenerator = new HeightGenerator(settings.seed, settings);
-		this.meshBuilder = new TerrainMeshBuilder(this.heightGenerator, settings.seed);
+		this.meshBuilder = new TerrainMeshBuilder(this.heightGenerator, settings.seed, settings);
 		this.vegetation.clearAll();
 		this.vegetation = new VegetationSystem(this.scene, this.heightGenerator, settings.seed, settings);
 
@@ -157,5 +159,26 @@ export class ChunkManager {
 		this.activeChunks.clear();
 		this.generationQueue = [];
 		this.lastUpdatePos.set(Infinity, Infinity, Infinity);
+	}
+
+	updateNoiseSettings(settings) {
+		this.settings = settings;
+		if (this.meshBuilder) {
+			this.meshBuilder.noiseScale = settings.noiseScale;
+			this.meshBuilder.noiseIntensity = settings.noiseIntensity;
+			this.meshBuilder.noiseEnabled = !!settings.noiseEnabled;
+		}
+
+		for (const [key, chunk] of this.chunks.entries()) {
+			const coord = key.split('_')[0];
+			const parts = coord.split(',');
+			const cx = parseInt(parts[0], 10);
+			const cz = parseInt(parts[1], 10);
+			if (chunk && chunk.mesh) {
+				chunk.mesh.userData = chunk.mesh.userData || {};
+				chunk.mesh.userData.chunkSize = this.settings.chunkSize;
+				this.meshBuilder.recolorMesh(chunk.mesh, cx, cz);
+			}
+		}
 	}
 }

@@ -97,10 +97,13 @@ export class WeatherSystem {
 			transparent: true,
 			opacity: 0.6,
 			blending: THREE.AdditiveBlending,
-			depthWrite: false
+			depthWrite: false,
+			depthTest: true,
+			alphaTest: 0.0001
 		});
 
 		this.particles = new THREE.Points(this.particleGeometry, this.particleMaterial);
+		this.particles.renderOrder = 2;
 		this.particles.frustumCulled = false;
 		this.particles.visible = false;
 		this.scene.add(this.particles);

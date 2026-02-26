@@ -27,33 +27,39 @@ export class HeightGenerator {
 
 		let finalHeight = 0;
 
+		const warped = this.baseNoise.domainWarp(x * 0.0005, z * 0.0005, 2.0);
+
 		for (const w of weights) {
 			if (w.weight < 0.001) continue;
 
 			const params = w.biome.heightParams;
 
 			const base = this.baseNoise.fbm(
-				x * 0.001 * sMult * params.scale,
-				z * 0.001 * sMult * params.scale,
-				4, 0.5, 2
+				warped.x * sMult * params.scale,
+				warped.y * sMult * params.scale,
+				4, 0.45, 2
 			);
 
-			const mtn = this.mountainNoise.fbm(
-				x * 0.003 * sMult * params.scale,
-				z * 0.003 * sMult * params.scale,
-				6, 0.5, 2
+			const mtn = this.mountainNoise.ridgedFbm(
+				x * 0.001 * sMult * params.scale,
+				z * 0.001 * sMult * params.scale,
+				4, 0.4, 2.0
 			);
 
 			const detail = this.detailNoise.fbm(
-				x * 0.015 * sMult * params.scale,
-				z * 0.015 * sMult * params.scale,
-				2, 0.5, 2
+				x * 0.005 * sMult * params.scale,
+				z * 0.005 * sMult * params.scale,
+				2, 0.3, 2
 			);
 
-			let h = params.base + (base * 20 * params.roughness);
-			const mtnHeight = Math.pow(Math.max(0, mtn), 1.5) * 100 * params.roughness;
-			h += mtnHeight;
-			h += detail * 5 * params.roughness;
+			let h = params.base + (base * 25 * params.roughness);
+			
+			if (params.roughness > 0.1) {
+				const mtnHeight = Math.pow(Math.max(0, mtn), 1.6) * 100 * params.roughness;
+				h += mtnHeight;
+			}
+			
+			h += detail * 4 * params.roughness;
 
 			finalHeight += h * w.weight;
 		}
