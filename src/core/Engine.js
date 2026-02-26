@@ -21,7 +21,7 @@ export class Engine {
 		this.player = null;
 		this.stats = null;
 		this.gui = null;
-		this.clock = new THREE.Clock();
+		this.lastTime = performance.now();
 		this.world = null;
 		this.frameCount = 0;
 		this.lastFpsTime = performance.now();
@@ -396,7 +396,8 @@ export class Engine {
 		requestAnimationFrame(() => this.animate());
 
 		const frameStart = performance.now();
-		const deltaTime = this.clock.getDelta();
+		const deltaTime = Math.min(0.1, (frameStart - this.lastTime) / 1000);
+		this.lastTime = frameStart;
 		this.frameCount++;
 
 		if (this.settings.firstPerson) {
