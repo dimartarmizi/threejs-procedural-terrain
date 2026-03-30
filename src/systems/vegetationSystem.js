@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { SeededRandom } from '../utils/SeededRandom.js';
-import { BiomeRegistry } from '../biomes/BiomeRegistry.js';
-import { BiomeMap } from '../terrain/BiomeMap.js';
+import { SeededRandom } from '../utils/seededRandom.js';
+import { BiomeRegistry } from '../registries/biomeRegistry.js';
+import { BiomeMap } from '../terrain/biomeMap.js';
 
 export class VegetationSystem {
 	constructor(scene, heightGenerator, seed, settings = { treeDensity: 50 }) {

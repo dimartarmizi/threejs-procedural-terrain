@@ -9,7 +9,7 @@ export class SkySystem {
 		this.saturationMult = 1.0;
 		this.brightnessMult = 1.0;
 
-		const geo = new THREE.SphereGeometry(5000, 32, 32);
+		const geo = new THREE.SphereGeometry(2000, 32, 32);
 
 		const mat = new THREE.ShaderMaterial({
 			uniforms: {
@@ -172,7 +172,7 @@ export class SkySystem {
 			const x = Math.sin(phi) * Math.cos(theta);
 			const y = Math.cos(phi);
 			const z = Math.sin(phi) * Math.sin(theta);
-			const r = 4900 + (Math.random() * 50 - 25);
+			const r = 1900 + (Math.random() * 50 - 25);
 			starPositions[i * 3 + 0] = x * r;
 			starPositions[i * 3 + 1] = y * r;
 			starPositions[i * 3 + 2] = z * r;
@@ -185,7 +185,7 @@ export class SkySystem {
 		this.stars.frustumCulled = false;
 		this.scene.add(this.stars);
 
-		const moonGeo = new THREE.SphereGeometry(60, 32, 32);
+		const moonGeo = new THREE.SphereGeometry(24, 32, 32);
 
 		function makeGlowTexture(size) {
 			const cvs = document.createElement('canvas');
@@ -224,15 +224,19 @@ export class SkySystem {
 			depthWrite: false
 		});
 		this.moonGlow = new THREE.Sprite(spriteMat);
-		this.moonGlow.scale.set(600, 600, 1);
+		this.moonGlow.scale.set(240, 240, 1);
 		this.moonGlow.frustumCulled = false;
 		this.scene.add(this.moonGlow);
 	}
 
 	update(time, deltaTime) {
 		this.sky.material.uniforms.time.value += deltaTime;
-		if (this.camera && this.sky.material.uniforms.cameraPos) {
-			this.sky.material.uniforms.cameraPos.value.copy(this.camera.position);
+		if (this.camera) {
+			this.sky.position.copy(this.camera.position);
+			this.stars.position.copy(this.camera.position);
+			if (this.sky.material.uniforms.cameraPos) {
+				this.sky.material.uniforms.cameraPos.value.copy(this.camera.position);
+			}
 		}
 
 		const angle = ((time - 12) / 12) * Math.PI;
@@ -270,14 +274,14 @@ export class SkySystem {
 
 		if (this.sky.material.uniforms.sunDirection) this.sky.material.uniforms.sunDirection.value.copy(this.sun);
 
-		const nightFactor = clamp01(( -sunY - 0.1 ) / 0.9);
+		const nightFactor = clamp01((-sunY - 0.1) / 0.9);
 		if (this.stars && this.stars.material) {
 			this.stars.material.opacity = THREE.MathUtils.lerp(this.stars.material.opacity, 0.95 * nightFactor, 0.1);
 		}
 
 		if (this.moon && this.moonGlow) {
 			const moonDir = this.sun.clone().multiplyScalar(-1).normalize();
-			const moonDist = 4500;
+			const moonDist = 1800;
 			this.moon.position.set(moonDir.x * moonDist, moonDir.y * moonDist, moonDir.z * moonDist);
 			this.moonGlow.position.copy(this.moon.position);
 			this.moon.visible = nightFactor > 0.02;

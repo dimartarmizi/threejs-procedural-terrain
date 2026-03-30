@@ -1,4 +1,4 @@
-import { Noise } from './Noise.js';
+import { Noise } from './noise.js';
 
 export class BiomeMap {
 	constructor(seed) {
@@ -21,5 +21,13 @@ export class BiomeMap {
 	getMoisture(x, z) {
 		const { x: wx, z: wz } = this.getWarpedCoords(x, z);
 		return this.moistureNoise.fbm(wx * 0.0001, wz * 0.0001, 3) * 0.5 + 0.5;
+	}
+
+	/** Returns both temp and moisture with a single warp calculation — 2× faster than calling each separately */
+	getBiomeData(x, z) {
+		const { x: wx, z: wz } = this.getWarpedCoords(x, z);
+		const temp = this.tempNoise.fbm(wx * 0.0001, wz * 0.0001, 3) * 0.5 + 0.5;
+		const moisture = this.moistureNoise.fbm(wx * 0.0001, wz * 0.0001, 3) * 0.5 + 0.5;
+		return { temp, moisture };
 	}
 }

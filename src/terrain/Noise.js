@@ -1,5 +1,5 @@
 import { createNoise2D } from 'simplex-noise';
-import { SeededRandom } from '../utils/SeededRandom.js';
+import { SeededRandom } from '../utils/seededRandom.js';
 
 export class Noise {
 	constructor(seed) {

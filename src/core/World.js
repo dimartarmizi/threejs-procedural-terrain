@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { ChunkManager } from './ChunkManager.js';
-import { eventBus } from './EventBus.js';
-import { TimeSystem } from '../environment/TimeSystem.js';
-import { SkySystem } from '../environment/SkySystem.js';
-import { WaterSystem } from '../environment/WaterSystem.js';
-import { WeatherSystem } from '../environment/WeatherSystem.js';
-import { BiomeMap } from '../terrain/BiomeMap.js';
-import { BiomeRegistry } from '../biomes/BiomeRegistry.js';
+import { ChunkManager } from './chunkManager.js';
+import { eventBus } from './eventBus.js';
+import { TimeSystem } from '../systems/timeSystem.js';
+import { SkySystem } from '../systems/skySystem.js';
+import { WaterSystem } from '../systems/waterSystem.js';
+import { WeatherSystem } from '../systems/weatherSystem.js';
+import { BiomeMap } from '../terrain/biomeMap.js';
+import { BiomeRegistry } from '../registries/biomeRegistry.js';
 
 export class World {
 	constructor(scene, camera, settings) {
@@ -51,11 +51,11 @@ export class World {
 		this.sunLight = new THREE.DirectionalLight(0xffffff, this.settings.sunIntensity || 1.0);
 		this.sunLight.castShadow = this.settings.shadows !== undefined ? this.settings.shadows : true;
 
-		this.sunLight.shadow.mapSize.set(2048, 2048);
-		this.sunLight.shadow.camera.left = -200;
-		this.sunLight.shadow.camera.right = 200;
-		this.sunLight.shadow.camera.top = 200;
-		this.sunLight.shadow.camera.bottom = -200;
+		this.sunLight.shadow.mapSize.set(1024, 1024);
+		this.sunLight.shadow.camera.left = -150;
+		this.sunLight.shadow.camera.right = 150;
+		this.sunLight.shadow.camera.top = 150;
+		this.sunLight.shadow.camera.bottom = -150;
 		this.sunLight.shadow.camera.near = 1;
 		this.sunLight.shadow.camera.far = 1000;
 		this.sunLight.shadow.bias = -0.0005;
@@ -153,19 +153,20 @@ export class World {
 			this.waterSystem.update(deltaTime, playerPosition);
 		}
 
-		const timeHud = document.getElementById('time');
-		if (timeHud) timeHud.innerText = `Time: ${this.timeSystem.getTimeString()}`;
-
-		const coordsHud = document.getElementById('coords');
-		if (coordsHud) coordsHud.innerText = `X: ${playerPosition.x.toFixed(0)}, Z: ${playerPosition.z.toFixed(0)}`;
-
-		const biomeHud = document.getElementById('biome');
-		if (biomeHud) {
+		let biomeId = null;
+		if (this.chunkManager && this.chunkManager.heightGenerator) {
 			const temp = this.biomeMap.getTemperature(playerPosition.x, playerPosition.z);
 			const moisture = this.biomeMap.getMoisture(playerPosition.x, playerPosition.z);
 			const height = this.chunkManager.heightGenerator.getHeight(playerPosition.x, playerPosition.z);
 			const biome = BiomeRegistry.getBiome(height, moisture, temp);
-			biomeHud.innerText = `Biome: ${biome.id.toUpperCase()}`;
+			biomeId = biome.id;
 		}
+
+		return {
+			time: this.timeSystem.getTimeString(),
+			x: playerPosition.x,
+			z: playerPosition.z,
+			biomeId
+		};
 	}
 }

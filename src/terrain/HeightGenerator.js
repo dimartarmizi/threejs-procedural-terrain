@@ -1,6 +1,6 @@
-import { Noise } from './Noise.js';
-import { BiomeMap } from './BiomeMap.js';
-import { BiomeRegistry } from '../biomes/BiomeRegistry.js';
+import { Noise } from './noise.js';
+import { BiomeMap } from './biomeMap.js';
+import { BiomeRegistry } from '../registries/biomeRegistry.js';
 
 export class HeightGenerator {
 	constructor(seed, settings = { terrainHeight: 1, terrainScale: 1 }) {
@@ -20,8 +20,7 @@ export class HeightGenerator {
 		const hMult = this.settings.terrainHeight || 1;
 		const sMult = this.settings.terrainScale || 1;
 
-		const temp = this.biomeMap.getTemperature(x, z);
-		const moisture = this.biomeMap.getMoisture(x, z);
+		const { temp, moisture } = this.biomeMap.getBiomeData(x, z);
 
 		const weights = BiomeRegistry.getBiomeWeights(null, moisture, temp);
 

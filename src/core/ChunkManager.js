@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { TerrainMeshBuilder } from '../terrain/TerrainMeshBuilder.js';
-import { HeightGenerator } from '../terrain/HeightGenerator.js';
-import { VegetationSystem } from '../life/VegetationSystem.js';
+import { TerrainMeshBuilder } from '../terrain/terrainMeshBuilder.js';
+import { HeightGenerator } from '../terrain/heightGenerator.js';
+import { VegetationSystem } from '../systems/vegetationSystem.js';
 
 export class ChunkManager {
 	constructor(scene, settings) {
@@ -89,9 +89,12 @@ export class ChunkManager {
 	processQueue() {
 		if (this.generationQueue.length === 0) return;
 
-		const task = this.generationQueue.shift();
+		const maxPerFrame = 2;
+		for (let n = 0; n < maxPerFrame && this.generationQueue.length > 0; n++) {
+			const task = this.generationQueue.shift();
 
-		if (this.activeChunks.has(task.key)) {
+			if (!this.activeChunks.has(task.key)) continue;
+
 			const coordKey = task.key.split('_')[0];
 
 			let oldLODKey = null;
@@ -129,8 +132,7 @@ export class ChunkManager {
 
 	createChunk(x, z, lod = 0) {
 		const { chunkSize } = this.settings;
-		const resolutions = [128, 64, 32];
-		const resolution = this.settings.chunkResolution || resolutions[lod];
+		const resolution = Math.max(8, this.settings.chunkResolution || 48);
 
 		const mesh = this.meshBuilder.build(x, z, chunkSize, resolution);
 		mesh.userData = mesh.userData || {};

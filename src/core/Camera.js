@@ -2,12 +2,13 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 export class CameraController {
-	constructor(camera, rendererDomElement, player, world, settings) {
+	constructor(camera, rendererDomElement, player, world, settings, hud = null) {
 		this.camera = camera;
 		this.dom = rendererDomElement;
 		this.player = player;
 		this.world = world;
 		this.settings = settings;
+		this.hud = hud;
 
 		this.controls = new OrbitControls(this.camera, this.dom);
 		this.controls.enableDamping = true;
@@ -57,6 +58,7 @@ export class CameraController {
 			} catch (e) {
 			}
 		}
+			if (this.hud) this.hud.setInstructionVisible(true);
 	}
 
 	switchToOrbit() {
@@ -75,6 +77,7 @@ export class CameraController {
 
 		this.controls.enabled = true;
 		this.controls.update();
+		if (this.hud) this.hud.setInstructionVisible(false);
 	}
 
 	updateSavedOrbitHeight() {

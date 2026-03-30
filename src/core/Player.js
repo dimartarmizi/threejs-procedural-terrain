@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 
 export class Player {
-	constructor(camera, domElement, world) {
+	constructor(camera, domElement, world, hud = null) {
 		this.camera = camera;
 		this.world = world;
+		this.hud = hud;
 		this.controls = new PointerLockControls(camera, domElement);
 		this._enabled = false;
 
@@ -110,14 +111,12 @@ export class Player {
 		});
 
 		this.controls.addEventListener('lock', () => {
-			const el = document.getElementById('fps-instruction');
-			if (el) el.style.display = 'none';
+			if (this.hud) this.hud.setInstructionVisible(false);
 		});
 
 		this.controls.addEventListener('unlock', () => {
 			if (this.enabled) {
-				const el = document.getElementById('fps-instruction');
-				if (el) el.style.display = 'block';
+				if (this.hud) this.hud.setInstructionVisible(true);
 			}
 		});
 	}
