@@ -13,7 +13,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
 	sunIntensity: 1.0,
 	fogDensity: 0.00015,
 	treeDensity: 3,
-	waterColor: '#1a5fb4',
 	sunColor: '#fff5e6',
 	cloudIntensity: 0.6,
 	cloudScale: 0.0004,

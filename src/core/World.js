@@ -150,7 +150,7 @@ export class World {
 		}
 
 		if (this.waterSystem) {
-			this.waterSystem.update(deltaTime, playerPosition);
+			this.waterSystem.update(deltaTime, playerPosition, env);
 		}
 
 		let biomeId = null;

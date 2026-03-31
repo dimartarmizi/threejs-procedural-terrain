@@ -123,10 +123,6 @@ export function createEngineGui(engine) {
 	});
 
 	const waterFolder = gui.addFolder('Water');
-	waterFolder.addColor(engine.settings, 'waterColor').name('Color').onChange((value) => {
-		if (engine.world && engine.world.waterSystem) engine.world.waterSystem.water.material.color.set(value);
-		engine.saveSettings();
-	});
 	waterFolder.add(engine.settings, 'waterHeight', 0, 20).name('Height').onChange((value) => {
 		engine.settings.waterHeight = value;
 		if (engine.world && engine.world.waterSystem) engine.world.waterSystem.setHeight(value);
