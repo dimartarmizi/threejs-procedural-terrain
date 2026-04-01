@@ -34,6 +34,7 @@ export class ProceduralTerrain {
 		height = height * this.heightScale;
 		height -= this.heightScale * 0.32;
 		height += this.noise(sampleX * 0.0022, sampleZ * 0.0022) * this.heightScale * 0.004;
+		height += 50;
 
 		return height;
 	}
