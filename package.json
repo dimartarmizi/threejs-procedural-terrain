@@ -1,0 +1,20 @@
+{
+  "name": "new-procedural-terrain",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "alea": "^1.0.1",
+    "lil-gui": "^0.20.0",
+    "simplex-noise": "^4.0.3",
+    "three": "^0.164.1"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}
