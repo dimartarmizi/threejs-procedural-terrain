@@ -68,11 +68,16 @@ export function createTerrainSystem(scene, settings) {
 		return terrain.tileSize * (settings.renderDistance + 3) * 2;
 	}
 
+	function getHeightAt(worldX, worldZ) {
+		return terrain.sampleHeight(worldX, worldZ);
+	}
+
 	return {
 		applyTerrainSettings,
 		update,
 		setWireframe,
 		getCameraFar,
+		getHeightAt,
 	};
 }
 

@@ -8,9 +8,10 @@ export function createTerrainGui(settings, handlers) {
   terrainFolder.add(settings, 'seed', 1, 999, 1).onFinishChange(handlers.updateTerrain);
   terrainFolder.add(settings, 'heightScale', 0, 120, 1).onChange(handlers.updateTerrain);
   terrainFolder.add(settings, 'segments', 16, 96, 1).onFinishChange(handlers.updateTerrain);
-  terrainFolder.add(settings, 'renderDistance', 1, 8, 1).onFinishChange(handlers.updateTerrain);
+  terrainFolder.add(settings, 'renderDistance', 1, 16, 1).onFinishChange(handlers.updateTerrain);
   terrainFolder.add(settings, 'wireframe').onChange(handlers.updateWireframe);
   terrainFolder.add(settings, 'gridHelper').onChange(handlers.updateGridHelper);
+  terrainFolder.add(settings, 'mode', ['orbit', 'player', 'drive', 'fly']).onChange(handlers.updateMode);
   terrainFolder.open();
 
   const atmosphereFolder = gui.addFolder('Atmosphere');

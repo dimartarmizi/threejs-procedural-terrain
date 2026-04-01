@@ -6,6 +6,7 @@ export const settings = {
 	heightScale: 56,
 	wireframe: false,
 	gridHelper: true,
+	mode: 'orbit',
 	fogDensity: 0.001,
 	sunIntensity: 1.4,
 	ambientIntensity: 0.65,

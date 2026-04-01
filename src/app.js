@@ -6,6 +6,10 @@ import { createLighting } from './core/lighting.js';
 import { createGridHelper } from './core/gridHelper.js';
 import { createRenderer } from './core/renderer.js';
 import { createScene } from './core/scene.js';
+import { createOrbitMode } from './modes/orbit.js';
+import { createPlayerMode } from './modes/player.js';
+import { createDriveMode } from './modes/drive.js';
+import { createFlyMode } from './modes/fly.js';
 import { createInfoOverlay } from './ui/infoOverlay.js';
 import { createTerrainGui } from './ui/terrainGui.js';
 import { createTerrainSystem } from './systems/terrainSystem.js';
@@ -21,6 +25,14 @@ export function startApp() {
 	const gridHelper = createGridHelper(settings);
 	scene.add(gridHelper);
 	const terrainSystem = createTerrainSystem(scene, settings);
+	const orbitMode = createOrbitMode(controls);
+	const modes = {
+		orbit: orbitMode,
+		player: createPlayerMode(camera, renderer.domElement, terrainSystem),
+		drive: createDriveMode(camera, scene, terrainSystem),
+		fly: createFlyMode(camera, scene),
+	};
+	let activeMode = null;
 	const infoOverlay = createInfoOverlay(app);
 	const clock = new THREE.Clock();
 	let elapsedTime = 0;
@@ -37,6 +49,7 @@ export function startApp() {
 			terrainSystem.applyTerrainSettings(settings);
 			camera.far = terrainSystem.getCameraFar();
 			camera.updateProjectionMatrix();
+			refreshActiveMode();
 			terrainSystem.update(camera.position);
 		},
 		updateAtmosphere() {
@@ -52,6 +65,9 @@ export function startApp() {
 		updateGridHelper() {
 			gridHelper.visible = settings.gridHelper;
 		},
+		updateMode() {
+			setActiveMode(settings.mode);
+		},
 	});
 
 	camera.far = terrainSystem.getCameraFar();
@@ -59,6 +75,7 @@ export function startApp() {
 	scene.fog.density = settings.fogDensity;
 	terrainSystem.setWireframe(settings.wireframe);
 	gridHelper.visible = settings.gridHelper;
+	setActiveMode(settings.mode);
 	infoOverlay.update({
 		fps: 0,
 		cpuUsage: 0,
@@ -77,21 +94,29 @@ export function startApp() {
 		requestAnimationFrame(animate);
 		const delta = clock.getDelta();
 		const workStart = performance.now();
-		controls.update();
+		if (activeMode) {
+			activeMode.update(delta);
+		} else {
+			controls.update();
+		}
 		terrainSystem.update(camera.position);
 		renderer.render(scene, camera);
 		workTime += performance.now() - workStart;
 		frameCount += 1;
 		elapsedTime += delta;
 
+		const groundHeight = terrainSystem.getHeightAt(camera.position.x, camera.position.z);
+		infoOverlay.update({
+			positionText: formatPosition(camera.position),
+			heightText: groundHeight.toFixed(1),
+			fps: fps,
+			cpuUsage: cpuUsage,
+			memoryText: getMemoryText(),
+		});
+
 		if (elapsedTime >= 1) {
 			fps = Math.round(frameCount / elapsedTime);
 			cpuUsage = Math.min(100, (workTime / (elapsedTime * 1000)) * 100);
-			infoOverlay.update({
-				fps: fps,
-				cpuUsage: cpuUsage,
-				memoryText: getMemoryText(),
-			});
 			elapsedTime = 0;
 			frameCount = 0;
 			workTime = 0;
@@ -100,6 +125,24 @@ export function startApp() {
 
 	onResize();
 	animate();
+
+	function setActiveMode(modeName) {
+		if (activeMode) {
+			activeMode.setEnabled(false);
+		}
+
+		activeMode = modes[modeName] || modes.orbit;
+		controls.enabled = false;
+		activeMode.setEnabled(true);
+		renderer.domElement.focus({ preventScroll: true });
+	}
+
+	function refreshActiveMode() {
+		if (activeMode) {
+			activeMode.setEnabled(true);
+			renderer.domElement.focus({ preventScroll: true });
+		}
+	}
 }
 
 function getMemoryText() {
@@ -110,4 +153,8 @@ function getMemoryText() {
 	}
 
 	return 'n/a';
+}
+
+function formatPosition(position) {
+	return position.x.toFixed(1) + ', ' + position.y.toFixed(1) + ', ' + position.z.toFixed(1);
 }
