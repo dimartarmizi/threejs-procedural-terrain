@@ -6,6 +6,7 @@ import { createLighting } from './core/lighting.js';
 import { createGridHelper } from './core/gridHelper.js';
 import { createRenderer } from './core/renderer.js';
 import { createScene } from './core/scene.js';
+import { createSky } from './core/sky.js';
 import { createOrbitMode } from './modes/orbit.js';
 import { createPlayerMode } from './modes/player.js';
 import { createDriveMode } from './modes/drive.js';
@@ -22,6 +23,7 @@ export function startApp() {
 	const renderer = createRenderer(app);
 	const controls = new OrbitControls(camera, renderer.domElement);
 	const lights = createLighting(scene);
+	const sky = createSky(settings.seed);
 	const gridHelper = createGridHelper(settings);
 	scene.add(gridHelper);
 	const terrainSystem = createTerrainSystem(scene, settings);
@@ -54,10 +56,10 @@ export function startApp() {
 		},
 		updateAtmosphere() {
 			scene.fog.density = settings.fogDensity;
+			syncSky();
 		},
 		updateLight() {
-			lights.sun.intensity = settings.sunIntensity;
-			lights.ambientLight.intensity = settings.ambientIntensity;
+			syncSky();
 		},
 		updateWireframe() {
 			terrainSystem.setWireframe(settings.wireframe);
@@ -75,6 +77,7 @@ export function startApp() {
 	scene.fog.density = settings.fogDensity;
 	terrainSystem.setWireframe(settings.wireframe);
 	gridHelper.visible = settings.gridHelper;
+	syncSky();
 	setActiveMode(settings.mode);
 	infoOverlay.update({
 		fps: 0,
@@ -94,13 +97,17 @@ export function startApp() {
 		requestAnimationFrame(animate);
 		const delta = clock.getDelta();
 		const workStart = performance.now();
+		if (settings.timeEnabled) {
+			settings.timeOfDay = (settings.timeOfDay + delta * settings.timeScale) % 24;
+		}
 		if (activeMode) {
 			activeMode.update(delta);
 		} else {
 			controls.update();
 		}
+		syncSky();
 		terrainSystem.update(camera.position);
-		renderer.render(scene, camera);
+		renderScene();
 		workTime += performance.now() - workStart;
 		frameCount += 1;
 		elapsedTime += delta;
@@ -142,6 +149,20 @@ export function startApp() {
 			activeMode.setEnabled(true);
 			renderer.domElement.focus({ preventScroll: true });
 		}
+	}
+
+	function syncSky() {
+		sky.update(camera.position, settings, lights);
+		if (scene.fog) {
+			scene.fog.color.copy(sky.fogColor);
+		}
+	}
+
+	function renderScene() {
+		renderer.clear();
+		sky.render(renderer, camera);
+		renderer.clearDepth();
+		renderer.render(scene, camera);
 	}
 }
 

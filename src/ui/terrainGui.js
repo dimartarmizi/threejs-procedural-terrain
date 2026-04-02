@@ -16,8 +16,12 @@ export function createTerrainGui(settings, handlers) {
 
   const atmosphereFolder = gui.addFolder('Atmosphere');
   atmosphereFolder.add(settings, 'fogDensity', 0, 0.02, 0.0001).onChange(handlers.updateAtmosphere);
-  atmosphereFolder.add(settings, 'sunIntensity', 0, 3, 0.01).onChange(handlers.updateLight);
-  atmosphereFolder.add(settings, 'ambientIntensity', 0, 2, 0.01).onChange(handlers.updateLight);
+
+  const skyFolder = gui.addFolder('Sky');
+  skyFolder.add(settings, 'timeEnabled').name('time on/off').onChange(handlers.updateLight);
+  skyFolder.add(settings, 'timeScale', 0, 4, 0.01).name('timeScale').onChange(handlers.updateLight);
+  skyFolder.add(settings, 'timeOfDay', 0, 24, 0.1).name('timeOfDay').onChange(handlers.updateLight).listen();
+  skyFolder.add(settings, 'season', ['spring', 'summer', 'autumn', 'winter']).name('season').onChange(handlers.updateLight);
 
   return gui;
 }
