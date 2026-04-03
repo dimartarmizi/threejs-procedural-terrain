@@ -1,3 +1,5 @@
+import { applyDistanceFade, setupDistanceFadeMaterial } from '../core/distanceFade.js';
+
 export function createTileStreamingController(terrain, scene, settings) {
 	const tiles = new Map();
 	const tileCreationBudget = 1;
@@ -22,6 +24,7 @@ export function createTileStreamingController(terrain, scene, settings) {
 		missingTiles.sort(sortByPriority);
 		createQueuedTiles(missingTiles, tileCreationBudget, terrain, scene, settings.wireframe, tiles);
 		removeUnusedTiles(scene, tiles, neededTiles);
+		applyDistanceFade(tiles, cameraPosition, terrain.tileSize, settings.renderDistance, settings.fadeDensity);
 	}
 
 	function setWireframe(enabled) {
@@ -67,13 +70,13 @@ function createQueuedTiles(missingTiles, tileCreationBudget, terrain, scene, wir
 		}
 
 		const tile = terrain.createTileMesh(tileInfo.tileX, tileInfo.tileZ, wireframe);
+		setupDistanceFadeMaterial(tile.material);
 		tile.receiveShadow = true;
 		tile.castShadow = false;
 		scene.add(tile);
 		tiles.set(key, tile);
 	}
 }
-
 function removeUnusedTiles(scene, tiles, neededTiles) {
 	const keys = Array.from(tiles.keys());
 

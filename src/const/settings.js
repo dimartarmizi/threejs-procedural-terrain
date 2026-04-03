@@ -7,7 +7,7 @@ export const settings = {
 	wireframe: false,
 	gridHelper: true,
 	mode: 'orbit',
-	fogDensity: 0.001,
+	fadeDensity: 0.0005,
 	timeOfDay: 9,
 	timeEnabled: false,
 	timeScale: 0.1,

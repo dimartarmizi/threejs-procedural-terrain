@@ -3,7 +3,7 @@ import alea from 'alea';
 
 const DAY_SKY = new THREE.Color(0x87b7ff);
 const DAY_HORIZON = new THREE.Color(0xbfdfff);
-const DAY_FOG = new THREE.Color(0xa6ccf0);
+const DAY_LOW_SKY = new THREE.Color(0xa6ccf0);
 const DAY_SUN = new THREE.Color(0xfff0c2);
 const NIGHT_LIGHT = new THREE.Color(0x8aa4ff);
 const STAR_COLOR = new THREE.Color(0xffffff);
@@ -25,8 +25,8 @@ const SEASON_PALETTES = {
 		nightBottom: new THREE.Color(0x050816),
 		sunLight: new THREE.Color(0xfff1d0),
 		ambientDay: new THREE.Color(0xcfeaff),
-		fogDay: new THREE.Color(0xc6e6ff),
-		fogNight: new THREE.Color(0x07111f),
+		hazeDay: new THREE.Color(0xc6e6ff),
+		hazeNight: new THREE.Color(0x07111f),
 	},
 	summer: {
 		dayTop: new THREE.Color(0x5eb8ff),
@@ -42,8 +42,8 @@ const SEASON_PALETTES = {
 		nightBottom: new THREE.Color(0x04070d),
 		sunLight: new THREE.Color(0xfff0b4),
 		ambientDay: new THREE.Color(0xc1ecff),
-		fogDay: new THREE.Color(0xb9dcf4),
-		fogNight: new THREE.Color(0x060d19),
+		hazeDay: new THREE.Color(0xb9dcf4),
+		hazeNight: new THREE.Color(0x060d19),
 	},
 	autumn: {
 		dayTop: new THREE.Color(0x8fb5ff),
@@ -59,8 +59,8 @@ const SEASON_PALETTES = {
 		nightBottom: new THREE.Color(0x05070d),
 		sunLight: new THREE.Color(0xffe0b0),
 		ambientDay: new THREE.Color(0xd7e3ff),
-		fogDay: new THREE.Color(0xcfe0f4),
-		fogNight: new THREE.Color(0x070d18),
+		hazeDay: new THREE.Color(0xcfe0f4),
+		hazeNight: new THREE.Color(0x070d18),
 	},
 	winter: {
 		dayTop: new THREE.Color(0xa6d8ff),
@@ -76,8 +76,8 @@ const SEASON_PALETTES = {
 		nightBottom: new THREE.Color(0x04060c),
 		sunLight: new THREE.Color(0xfff2d9),
 		ambientDay: new THREE.Color(0xdcefff),
-		fogDay: new THREE.Color(0xd3e4f8),
-		fogNight: new THREE.Color(0x060c18),
+		hazeDay: new THREE.Color(0xd3e4f8),
+		hazeNight: new THREE.Color(0x060c18),
 	},
 };
 
@@ -104,7 +104,6 @@ export function createSky(seed = 1) {
 		render(renderer, camera) {
 			renderer.render(skyScene, camera);
 		},
-		fogColor: sky.fogColor,
 	};
 }
 
@@ -119,7 +118,6 @@ function createSkyRig(seed) {
 	const skyUpperColor = new THREE.Color();
 	const horizonColor = new THREE.Color();
 	const bottomColor = new THREE.Color();
-	const fogColor = new THREE.Color();
 	const sunLightColor = new THREE.Color();
 	const ambientLightColor = new THREE.Color();
 	const gradientMaterial = createSkyDomeMaterial();
@@ -151,7 +149,6 @@ function createSkyRig(seed) {
 		skyUpperColor,
 		horizonColor,
 		bottomColor,
-		fogColor,
 		sunLightColor,
 		ambientLightColor,
 		gradientMaterial,
@@ -177,7 +174,7 @@ function createSkyDomeMaterial() {
 			topColor: { value: DAY_SKY.clone() },
 			upperColor: { value: DAY_HORIZON.clone() },
 			horizonColor: { value: DAY_HORIZON.clone() },
-			bottomColor: { value: DAY_FOG.clone() },
+			bottomColor: { value: DAY_LOW_SKY.clone() },
 		},
 		vertexShader: `
 			varying vec3 vWorldPosition;
@@ -207,7 +204,6 @@ function createSkyDomeMaterial() {
 			}
 		`,
 		side: THREE.BackSide,
-		fog: false,
 		depthWrite: false,
 		toneMapped: false,
 	});
@@ -227,7 +223,6 @@ function createSunGlow() {
 			depthWrite: false,
 			depthTest: true,
 			blending: THREE.AdditiveBlending,
-			fog: false,
 		})
 	);
 	sunGlow.scale.set(100, 100, 1);
@@ -249,7 +244,6 @@ function createSunCore() {
 			depthWrite: false,
 			depthTest: true,
 			blending: THREE.AdditiveBlending,
-			fog: false,
 			toneMapped: false,
 		})
 	);
@@ -267,7 +261,6 @@ function createSunCorona() {
 			depthWrite: false,
 			depthTest: true,
 			blending: THREE.AdditiveBlending,
-			fog: false,
 		})
 	);
 	sunCorona.scale.set(130, 130, 1);
@@ -331,8 +324,7 @@ function updateSkyAppearance(sky, solarState, season) {
 	mixSeasonColor(sky.skyColor, palette.nightTop, palette.dayTop, solarState.dayFactor).lerp(palette.twilightTop, twilightFactor * 0.12);
 	mixSeasonColor(sky.skyUpperColor, palette.nightUpper, palette.dayUpper, solarState.dayFactor).lerp(palette.twilightUpper, twilightFactor * 0.5);
 	mixSeasonColor(sky.horizonColor, palette.nightHorizon, palette.dayHorizon, solarState.dayFactor).lerp(palette.twilightHorizon, twilightFactor * 0.82);
-	mixSeasonColor(sky.bottomColor, palette.nightBottom, palette.dayBottom, solarState.dayFactor).lerp(palette.fogDay, twilightFactor * 0.1);
-	sky.fogColor.copy(sky.bottomColor);
+	mixSeasonColor(sky.bottomColor, palette.nightBottom, palette.dayBottom, solarState.dayFactor).lerp(palette.hazeDay, twilightFactor * 0.1);
 
 	sky.gradientMaterial.uniforms.topColor.value.copy(sky.skyColor);
 	sky.gradientMaterial.uniforms.upperColor.value.copy(sky.skyUpperColor);
@@ -398,7 +390,6 @@ function createStars(seed) {
 		opacity: 0,
 		depthWrite: false,
 		depthTest: true,
-		fog: false,
 	});
 
 	const stars = new THREE.Points(geometry, material);

@@ -54,8 +54,8 @@ export function startApp() {
 			refreshActiveMode();
 			terrainSystem.update(camera.position);
 		},
-		updateAtmosphere() {
-			scene.fog.density = settings.fogDensity;
+		updateFade() {
+			terrainSystem.update(camera.position);
 			syncSky();
 		},
 		updateLight() {
@@ -74,7 +74,6 @@ export function startApp() {
 
 	camera.far = terrainSystem.getCameraFar();
 	camera.updateProjectionMatrix();
-	scene.fog.density = settings.fogDensity;
 	terrainSystem.setWireframe(settings.wireframe);
 	gridHelper.visible = settings.gridHelper;
 	syncSky();
@@ -153,9 +152,6 @@ export function startApp() {
 
 	function syncSky() {
 		sky.update(camera.position, settings, lights);
-		if (scene.fog) {
-			scene.fog.color.copy(sky.fogColor);
-		}
 	}
 
 	function renderScene() {
