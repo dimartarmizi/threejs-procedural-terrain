@@ -1,78 +1,74 @@
 import * as THREE from 'three';
+import { getTerrainOptions } from './config.js';
 import { createSimplexNoise2D } from './noise.js';
+import { getTerrainColor } from './color.js';
+
+function clamp(value, min, max) {
+	return Math.max(min, Math.min(max, value));
+}
 
 export class ProceduralTerrain {
-	constructor({ tileSize = 128, segments = 48, heightScale = 40, seed = 1 } = {}) {
-		this.setOptions({ tileSize, segments, heightScale, seed });
+	constructor(options = {}) {
+		this.setOptions(options);
 	}
 
-	setOptions({ tileSize, segments, heightScale, seed } = {}) {
-		this.tileSize = tileSize;
-		this.segments = segments;
-		this.heightScale = heightScale;
-		this.seed = seed;
+	setOptions(options = {}) {
+		const nextOptions = getTerrainOptions(options);
 
-		this.noise = createSimplexNoise2D(this.seed);
+		this.tileSize = nextOptions.tileSize;
+		this.scale = nextOptions.scale;
+		this.heightMultiplier = nextOptions.heightMultiplier;
+		this.baseHeight = nextOptions.baseHeight;
+		this.octaves = nextOptions.octaves;
+		this.persistence = nextOptions.persistence;
+		this.lacunarity = nextOptions.lacunarity;
+		this.seed = nextOptions.seed;
+		this.tileResolution = 48;
+
+		this.noise = createSimplexNoise2D(this.seed, {
+			octaves: this.octaves,
+			persistence: this.persistence,
+			lacunarity: this.lacunarity,
+		});
 	}
 
 	sampleHeight(worldX, worldZ) {
-		const warpX = this.noise(worldX * 0.00016 + 19.3, worldZ * 0.00016 - 7.1) * 4;
-		const warpZ = this.noise(worldX * 0.00016 - 11.7, worldZ * 0.00016 + 23.6) * 4;
+		const sampleX = worldX / this.scale;
+		const sampleZ = worldZ / this.scale;
+		const broadNoise = this.noise(sampleX, sampleZ);
+		const detailNoise = this.noise(sampleX * 1.9 + 17.3, sampleZ * 1.9 - 11.8);
+		const ridgeNoise = 1 - Math.abs(broadNoise);
+		const terrainShape = clamp(broadNoise * 0.7 + detailNoise * 0.3 + ridgeNoise * 0.2, -1, 1);
 
-		const sampleX = worldX + warpX;
-		const sampleZ = worldZ + warpZ;
-
-		const broad = this.noise(sampleX * 0.00018, sampleZ * 0.00018) * 0.5 + 0.5;
-		const hills = this.noise(sampleX * 0.00072, sampleZ * 0.00072) * 0.5 + 0.5;
-		const valleys = this.noise(sampleX * 0.00145 + 61.7, sampleZ * 0.00145 - 17.4) * 0.5 + 0.5;
-
-		const broadRise = Math.pow(smoothstep(0.08, 0.84, broad), 1.15);
-		const hillRise = Math.pow(smoothstep(0.18, 0.92, hills), 1.7);
-		const valleyDrop = Math.pow(1 - smoothstep(0.22, 0.88, valleys), 2.25);
-
-		let height = broadRise * 1.48 + hillRise * 0.72 - valleyDrop * 0.92;
-		height = height * this.heightScale;
-		height -= this.heightScale * 0.32;
-		height += this.noise(sampleX * 0.0022, sampleZ * 0.0022) * this.heightScale * 0.004;
-		height += 50;
-
-		return height;
+		return terrainShape * this.heightMultiplier + this.baseHeight;
 	}
 
 	createTileMesh(tileX, tileZ, wireframe) {
-		const geometry = new THREE.PlaneGeometry(this.tileSize, this.tileSize, this.segments, this.segments);
+		const geometry = new THREE.PlaneGeometry(this.tileSize, this.tileSize, this.tileResolution, this.tileResolution);
 		geometry.rotateX(-Math.PI / 2);
 
 		const position = geometry.attributes.position;
-		const colors = [];
-		const color = new THREE.Color();
+		const colorAttribute = new Float32Array(position.count * 3);
 		const worldOffsetX = tileX * this.tileSize;
 		const worldOffsetZ = tileZ * this.tileSize;
+		const color = new THREE.Color();
 
 		for (let index = 0; index < position.count; index += 1) {
-			const localX = position.getX(index);
-			const localZ = position.getZ(index);
-			const worldX = worldOffsetX + localX;
-			const worldZ = worldOffsetZ + localZ;
+			const worldX = worldOffsetX + position.getX(index);
+			const worldZ = worldOffsetZ + position.getZ(index);
 			const height = this.sampleHeight(worldX, worldZ);
 			position.setY(index, height);
 
-			if (height > this.heightScale * 0.42) {
-				color.setHex(0xe8e4d7);
-			} else if (height > this.heightScale * 0.18) {
-				color.setHex(0xa8c46a);
-			} else if (height > -this.heightScale * 0.02) {
-				color.setHex(0x7ea04f);
-			} else if (height > -this.heightScale * 0.18) {
-				color.setHex(0x5f8638);
-			} else {
-				color.setHex(0x365a3f);
-			}
+			const normalizedHeight = (height - this.baseHeight) / this.heightMultiplier;
+			getTerrainColor(normalizedHeight, color);
+			const colorOffset = index * 3;
 
-			colors.push(color.r, color.g, color.b);
+			colorAttribute[colorOffset] = color.r;
+			colorAttribute[colorOffset + 1] = color.g;
+			colorAttribute[colorOffset + 2] = color.b;
 		}
 
-		geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+		geometry.setAttribute('color', new THREE.Float32BufferAttribute(colorAttribute, 3));
 		geometry.computeVertexNormals();
 
 		const material = new THREE.MeshStandardMaterial({
@@ -90,21 +86,4 @@ export class ProceduralTerrain {
 		mesh.userData.tileZ = tileZ;
 		return mesh;
 	}
-}
-
-function clamp01(value) {
-	if (value < 0) {
-		return 0;
-	}
-
-	if (value > 1) {
-		return 1;
-	}
-
-	return value;
-}
-
-function smoothstep(edge0, edge1, value) {
-	const t = clamp01((value - edge0) / (edge1 - edge0));
-	return t * t * (3 - 2 * t);
 }
