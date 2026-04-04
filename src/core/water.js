@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
 const WATER_LEVEL = 0;
-const WATER_COLOR_DEEP = new THREE.Color(0x0b3a4d);
-const WATER_COLOR_SHALLOW = new THREE.Color(0x2f8fb3);
+const WATER_COLOR_DEEP = new THREE.Color(0x125a78);
+const WATER_COLOR_SHALLOW = new THREE.Color(0x5eb7dd);
 const DEFAULT_SUN_COLOR = new THREE.Color(0xffffff);
 const DEFAULT_AMBIENT_COLOR = new THREE.Color(0x7c8b9b);
 const DEFAULT_SUN_DIRECTION = new THREE.Vector3(0.4, 0.8, 0.2).normalize();
@@ -100,11 +100,11 @@ export function createWaterSurface(tileSize) {
 				float nDotL = max(dot(normal, sunDir), 0.0);
 				float specular = pow(max(dot(normal, normalize(sunDir + viewDir)), 0.0), 80.0);
 				float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 2.4);
-				vec3 baseColor = mix(uColorDeep, uColorShallow, fresnel * 0.9 + nDotL * 0.1);
-				vec3 ambient = uAmbientColor * uAmbientIntensity * 0.35;
-				vec3 diffuse = uSunColor * (uSunIntensity * (0.12 + nDotL * 0.55));
-				vec3 highlight = uSunColor * specular * (0.35 + fresnel * 0.5) * uSunIntensity;
-				vec3 finalColor = baseColor * (ambient + diffuse) + highlight + fresnel * 0.05;
+				vec3 baseColor = mix(uColorDeep, uColorShallow, fresnel * 0.95 + nDotL * 0.05);
+				vec3 ambient = uAmbientColor * uAmbientIntensity * 0.48;
+				vec3 diffuse = uSunColor * (uSunIntensity * (0.18 + nDotL * 0.62));
+				vec3 highlight = uSunColor * specular * (0.4 + fresnel * 0.55) * uSunIntensity;
+				vec3 finalColor = baseColor * (ambient + diffuse) + highlight + fresnel * 0.08;
 
 				vec3 fogViewDirection = normalize(vWorldPosition - uCameraPosition);
 				float skyT = clamp(fogViewDirection.y * 0.5 + 0.5, 0.0, 1.0);
@@ -119,7 +119,7 @@ export function createWaterSurface(tileSize) {
 				fogFactor = clamp(fogFactor, 0.0, 0.992);
 				finalColor = mix(finalColor, fogGradient, fogFactor);
 
-				gl_FragColor = vec4(finalColor, 0.62);
+				gl_FragColor = vec4(finalColor, 0.85);
 			}
 		`,
 		transparent: true,
