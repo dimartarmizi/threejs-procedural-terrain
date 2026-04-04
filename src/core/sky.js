@@ -96,6 +96,9 @@ export function createSky(seed = 1) {
 	const atmosphereState = createAtmosphereState();
 
 	return {
+		getScene() {
+			return skyScene;
+		},
 		update(cameraPosition, settings, lights) {
 			computeSolarState(solarState, settings.timeOfDay, settings.season);
 			updateSkyRig(sky, cameraPosition, solarState);

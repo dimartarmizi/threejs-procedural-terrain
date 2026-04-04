@@ -52,5 +52,12 @@ export function createTerrainGui(settings, handlers) {
 	skyFolder.add(settings, 'timeOfDay', 0, 24, 0.1).name('timeOfDay').onChange(handlers.updateLight).listen();
 	skyFolder.add(settings, 'season', ['spring', 'summer', 'autumn', 'winter']).name('season').onChange(handlers.updateLight);
 
+	const postFolder = gui.addFolder('Post Processing');
+	postFolder.add(settings, 'postProcessingEnabled').name('enabled').onChange(handlers.updatePostProcessing);
+	postFolder.add(settings, 'fxaaEnabled').name('fxaa').onChange(handlers.updatePostProcessing);
+	postFolder.add(settings, 'bloomStrength', 0, 2, 0.01).name('bloom strength').onChange(handlers.updatePostProcessing);
+	postFolder.add(settings, 'bloomRadius', 0, 1, 0.01).name('bloom radius').onChange(handlers.updatePostProcessing);
+	postFolder.add(settings, 'bloomThreshold', 0, 1.5, 0.01).name('bloom threshold').onChange(handlers.updatePostProcessing);
+
 	return gui;
 }

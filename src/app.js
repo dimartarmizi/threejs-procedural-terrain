@@ -7,6 +7,7 @@ import { createGridHelper } from './core/gridHelper.js';
 import { createRenderer } from './core/renderer.js';
 import { createScene } from './core/scene.js';
 import { createSky } from './core/sky.js';
+import { createPostProcessing } from './core/postProcessing.js';
 import { createOrbitMode } from './modes/orbit.js';
 import { createPlayerMode } from './modes/player.js';
 import { createDriveMode } from './modes/drive.js';
@@ -24,6 +25,7 @@ export function startApp() {
 	const controls = new OrbitControls(camera, renderer.domElement);
 	const lights = createLighting(scene);
 	const sky = createSky(settings.seed);
+	const postProcessing = createPostProcessing(renderer, sky.getScene(), scene, camera, settings);
 	const gridHelper = createGridHelper(settings);
 	scene.add(gridHelper);
 	const terrainSystem = createTerrainSystem(scene, settings);
@@ -62,6 +64,9 @@ export function startApp() {
 		updateLight() {
 			syncSky();
 		},
+		updatePostProcessing() {
+			postProcessing.updateSettings();
+		},
 		updateWireframe() {
 			terrainSystem.setWireframe(settings.wireframe);
 		},
@@ -91,6 +96,7 @@ export function startApp() {
 		camera.aspect = window.innerWidth / window.innerHeight;
 		camera.updateProjectionMatrix();
 		renderer.setSize(window.innerWidth, window.innerHeight);
+		postProcessing.resize(window.innerWidth, window.innerHeight);
 	}
 
 	function animate() {
@@ -157,10 +163,7 @@ export function startApp() {
 	}
 
 	function renderScene() {
-		renderer.clear();
-		sky.render(renderer, camera);
-		renderer.clearDepth();
-		renderer.render(scene, camera);
+		postProcessing.render();
 	}
 }
 
