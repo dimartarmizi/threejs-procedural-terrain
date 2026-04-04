@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import alea from 'alea';
+import { createCloudRig, updateCloudRig, updateCloudAppearance } from './cloud.js';
 
 const DAY_SKY = new THREE.Color(0x87b7ff);
 const DAY_HORIZON = new THREE.Color(0xbfdfff);
@@ -102,7 +103,7 @@ export function createSky(seed = 1) {
 		update(cameraPosition, settings, lights) {
 			computeSolarState(solarState, settings.timeOfDay, settings.season);
 			updateSkyRig(sky, cameraPosition, solarState);
-			const horizonColor = updateSkyAppearance(sky, solarState, settings.season);
+			const horizonColor = updateSkyAppearance(sky, solarState, settings.season, settings);
 			updateSkyLighting(lights, sky, cameraPosition, sky.sunRoot.position, solarState, horizonColor, settings.season);
 			atmosphereState.topColor.copy(sky.skyColor);
 			atmosphereState.upperColor.copy(sky.skyUpperColor);
@@ -141,9 +142,12 @@ function createSkyRig(seed) {
 	const sunLightColor = new THREE.Color();
 	const ambientLightColor = new THREE.Color();
 	const gradientMaterial = createSkyDomeMaterial();
+	const cloud = createCloudRig();
 
 	const dome = createSkyDome(gradientMaterial);
 	skyGroup.add(dome);
+
+	skyGroup.add(cloud.layer);
 
 	const sunRoot = new THREE.Group();
 	sunRoot.frustumCulled = false;
@@ -172,6 +176,7 @@ function createSkyRig(seed) {
 		sunLightColor,
 		ambientLightColor,
 		gradientMaterial,
+		cloud,
 		sunGlow: sunRoot.children[0],
 		sunCore: sunRoot.children[1],
 		sunCorona: sunRoot.children[2],
@@ -330,6 +335,7 @@ function computeSolarState(state, timeOfDay, season) {
 function updateSkyRig(sky, cameraPosition, solarState) {
 	sky.skyGroup.position.copy(cameraPosition);
 	sky.gradientMaterial.uniforms.skyCameraPosition.value.copy(cameraPosition);
+	updateCloudRig(sky.cloud, cameraPosition, solarState, performance.now() * 0.001);
 	sky.sunPosition.copy(solarState.sunDirection).multiplyScalar(760);
 	sky.sunRoot.position.copy(sky.sunPosition);
 	sky.starsRoot.quaternion.setFromAxisAngle(sky.poleAxis, solarState.siderealAngle);
@@ -340,7 +346,7 @@ function updateSkyRig(sky, cameraPosition, solarState) {
 	sky.stars.material.opacity = solarState.nightFactor * 0.92;
 }
 
-function updateSkyAppearance(sky, solarState, season) {
+function updateSkyAppearance(sky, solarState, season, settings) {
 	const palette = getSeasonPalette(season);
 	const twilightFactor = 1 - THREE.MathUtils.smoothstep(Math.abs(solarState.sunAltitude), 0.06, 0.28);
 
@@ -353,6 +359,7 @@ function updateSkyAppearance(sky, solarState, season) {
 	sky.gradientMaterial.uniforms.upperColor.value.copy(sky.skyUpperColor);
 	sky.gradientMaterial.uniforms.horizonColor.value.copy(sky.horizonColor);
 	sky.gradientMaterial.uniforms.bottomColor.value.copy(sky.bottomColor);
+	updateCloudAppearance(sky.cloud, solarState, palette, sky.horizonColor, settings);
 
 	return sky.horizonColor;
 }

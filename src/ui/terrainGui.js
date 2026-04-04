@@ -52,6 +52,30 @@ export function createTerrainGui(settings, handlers) {
 	skyFolder.add(settings, 'timeOfDay', 0, 24, 0.1).name('timeOfDay').onChange(handlers.updateLight).listen();
 	skyFolder.add(settings, 'season', ['spring', 'summer', 'autumn', 'winter']).name('season').onChange(handlers.updateLight);
 
+	const cloudFolder = gui.addFolder('Clouds');
+	cloudFolder.add(settings, 'cloudEnabled').name('enabled').onChange(handlers.updateLight);
+	const cloudCoverageController = cloudFolder
+		.add(settings, 'cloudCoverage', 0.2, 0.95, 0.01)
+		.name('coverage')
+		.onChange(handlers.updateLight)
+		.listen();
+	const cloudDensityController = cloudFolder
+		.add(settings, 'cloudDensity', 0.2, 1.5, 0.01)
+		.name('density')
+		.onChange(handlers.updateLight)
+		.listen();
+	const cloudOpacityController = cloudFolder
+		.add(settings, 'cloudOpacity', 0.2, 1, 0.01)
+		.name('opacity')
+		.onChange(handlers.updateLight)
+		.listen();
+	cloudCoverageController.updateDisplay();
+	cloudDensityController.updateDisplay();
+	cloudOpacityController.updateDisplay();
+	cloudFolder.add(settings, 'cloudSpeed', 0, 3, 0.01).name('speed').onChange(handlers.updateLight);
+	cloudFolder.add(settings, 'cloudBaseHeight', 80, 1200, 1).name('base height').onChange(handlers.updateLight);
+	cloudFolder.add(settings, 'cloudTopHeight', 200, 2000, 1).name('top height').onChange(handlers.updateLight);
+
 	const waterFolder = gui.addFolder('Water');
 	waterFolder.add(settings, 'waterEnabled').name('enabled').onChange(handlers.updateWater);
 

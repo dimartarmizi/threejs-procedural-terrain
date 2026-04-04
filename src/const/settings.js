@@ -24,4 +24,11 @@ export const settings = {
 	timeEnabled: false,
 	timeScale: 0.1,
 	season: 'spring',
+	cloudEnabled: false,
+	cloudCoverage: 0.58,
+	cloudDensity: 0.82,
+	cloudOpacity: 0.78,
+	cloudSpeed: 1.0,
+	cloudBaseHeight: 220,
+	cloudTopHeight: 760,
 };
