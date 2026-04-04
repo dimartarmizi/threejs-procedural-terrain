@@ -20,6 +20,10 @@ export function createTerrainSystem(scene, settings) {
 		tileStreaming.setAtmosphere(atmosphereState);
 	}
 
+	function setLighting(lightingState) {
+		tileStreaming.setLighting(lightingState);
+	}
+
 	function setWireframe(enabled) {
 		tileStreaming.setWireframe(enabled);
 	}
@@ -36,6 +40,7 @@ export function createTerrainSystem(scene, settings) {
 		applyTerrainSettings,
 		update,
 		setAtmosphere,
+		setLighting,
 		setWireframe,
 		getCameraFar,
 		getHeightAt,

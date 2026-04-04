@@ -64,6 +64,9 @@ export function startApp() {
 		updateLight() {
 			syncSky();
 		},
+		updateWater() {
+			terrainSystem.update(camera.position);
+		},
 		updatePostProcessing() {
 			postProcessing.updateSettings();
 		},
@@ -160,11 +163,21 @@ export function startApp() {
 	function syncSky() {
 		const atmosphere = sky.update(camera.position, settings, lights);
 		terrainSystem.setAtmosphere(atmosphere);
+		terrainSystem.setLighting(createLightingState(lights));
 	}
 
 	function renderScene() {
 		postProcessing.render();
 	}
+}
+
+function createLightingState(lights) {
+	return {
+		sunColor: lights.sun.color,
+		sunIntensity: lights.sun.intensity,
+		ambientColor: lights.ambientLight.color,
+		ambientIntensity: lights.ambientLight.intensity,
+	};
 }
 
 function getMemoryText() {

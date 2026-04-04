@@ -1,19 +1,27 @@
 import { applyFog, setupFogMaterial } from '../core/fog.js';
+import { createWaterSurface, createWaterTileMesh, updateWaterSurface } from '../core/water.js';
 
 export function createTileStreamingController(terrain, scene, settings) {
 	const tiles = new Map();
+	const waterTiles = new Map();
 	const tileCreationBudget = 1;
-	let needsRefresh = true;
-	let atmosphereState = null;
+	const state = {
+		needsRefresh: true,
+		atmosphereState: null,
+		lightingState: null,
+		waterSurface: null,
+	};
 
 	function markDirty() {
-		needsRefresh = true;
+		state.needsRefresh = true;
 	}
 
 	function update(cameraPosition) {
-		if (needsRefresh) {
+		if (state.needsRefresh) {
 			clearTiles(scene, tiles);
-			needsRefresh = false;
+			clearWaterTiles(scene, waterTiles);
+			disposeWaterSurface(state);
+			state.needsRefresh = false;
 		}
 
 		const centerX = Math.round(cameraPosition.x / terrain.tileSize);
@@ -25,19 +33,24 @@ export function createTileStreamingController(terrain, scene, settings) {
 		missingTiles.sort(sortByPriority);
 		createQueuedTiles(missingTiles, tileCreationBudget, terrain, scene, settings.wireframe, tiles);
 		removeUnusedTiles(scene, tiles, neededTiles);
-		applyFog(
+		const fogState = applyFog(
 			tiles,
 			cameraPosition,
 			terrain,
 			settings.renderDistance,
 			settings.fogDistance,
 			settings.fogEnabled,
-			atmosphereState
+			state.atmosphereState
 		);
+		syncWaterTiles(scene, terrain, tiles, waterTiles, settings, cameraPosition, getTimeSeconds(), fogState, state);
 	}
 
 	function setAtmosphere(nextAtmosphereState) {
-		atmosphereState = nextAtmosphereState;
+		state.atmosphereState = nextAtmosphereState;
+	}
+
+	function setLighting(nextLightingState) {
+		state.lightingState = nextLightingState;
 	}
 
 	function setWireframe(enabled) {
@@ -51,6 +64,7 @@ export function createTileStreamingController(terrain, scene, settings) {
 		markDirty,
 		update,
 		setAtmosphere,
+		setLighting,
 		setWireframe,
 	};
 }
@@ -130,4 +144,88 @@ function disposeTile(scene, tile) {
 	scene.remove(tile);
 	tile.geometry.dispose();
 	tile.material.dispose();
+}
+
+function syncWaterTiles(scene, terrain, terrainTiles, waterTiles, settings, cameraPosition, timeSeconds, fogState, state) {
+	if (!settings.waterEnabled) {
+		clearWaterTiles(scene, waterTiles);
+		if (state.waterSurface) {
+			updateWaterSurface(
+				state.waterSurface,
+				cameraPosition,
+				timeSeconds,
+				false,
+				state.atmosphereState,
+				state.lightingState,
+				fogState
+			);
+		}
+		return;
+	}
+
+	let activeSurface = state.waterSurface;
+	if (!activeSurface || activeSurface.tileSize !== terrain.tileSize) {
+		clearWaterTiles(scene, waterTiles);
+		disposeWaterSurface(state);
+		activeSurface = createWaterSurface(terrain.tileSize);
+		state.waterSurface = activeSurface;
+	}
+
+	terrainTiles.forEach(function (_, key) {
+		if (waterTiles.has(key)) {
+			return;
+		}
+
+		const tileCoords = parseTileKey(key);
+		const waterMesh = createWaterTileMesh(tileCoords.tileX, tileCoords.tileZ, terrain.tileSize, activeSurface);
+		scene.add(waterMesh);
+		waterTiles.set(key, waterMesh);
+	});
+
+	const waterKeys = Array.from(waterTiles.keys());
+	for (let index = 0; index < waterKeys.length; index += 1) {
+		const key = waterKeys[index];
+		if (!terrainTiles.has(key)) {
+			scene.remove(waterTiles.get(key));
+			waterTiles.delete(key);
+		}
+	}
+
+	updateWaterSurface(
+		activeSurface,
+		cameraPosition,
+		timeSeconds,
+		true,
+		state.atmosphereState,
+		state.lightingState,
+		fogState
+	);
+}
+
+function clearWaterTiles(scene, waterTiles) {
+	waterTiles.forEach(function (tile) {
+		scene.remove(tile);
+	});
+	waterTiles.clear();
+}
+
+function parseTileKey(key) {
+	const parts = key.split(':');
+	return {
+		tileX: Number(parts[0]),
+		tileZ: Number(parts[1]),
+	};
+}
+
+function getTimeSeconds() {
+	return performance.now() * 0.001;
+}
+
+function disposeWaterSurface(state) {
+	if (!state.waterSurface) {
+		return;
+	}
+
+	state.waterSurface.dispose();
+	state.waterSurface = null;
 }

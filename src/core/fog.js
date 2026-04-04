@@ -129,6 +129,16 @@ export function applyFog(tiles, cameraPosition, terrain, renderDistance, fogDist
 			safeFogDensity
 		);
 	});
+
+	return {
+		cameraPosition,
+		fogNear,
+		fogFar,
+		fogHeightMin,
+		fogHeightMax,
+		fogDensity: safeFogDensity,
+		atmosphereState,
+	};
 }
 
 function computeFogParameters(terrain, renderDistance, fogDistance) {

@@ -52,6 +52,9 @@ export function createTerrainGui(settings, handlers) {
 	skyFolder.add(settings, 'timeOfDay', 0, 24, 0.1).name('timeOfDay').onChange(handlers.updateLight).listen();
 	skyFolder.add(settings, 'season', ['spring', 'summer', 'autumn', 'winter']).name('season').onChange(handlers.updateLight);
 
+	const waterFolder = gui.addFolder('Water');
+	waterFolder.add(settings, 'waterEnabled').name('enabled').onChange(handlers.updateWater);
+
 	const postFolder = gui.addFolder('Post Processing');
 	postFolder.add(settings, 'postProcessingEnabled').name('enabled').onChange(handlers.updatePostProcessing);
 	postFolder.add(settings, 'fxaaEnabled').name('fxaa').onChange(handlers.updatePostProcessing);
