@@ -52,9 +52,10 @@ export function startApp() {
 			camera.far = terrainSystem.getCameraFar();
 			camera.updateProjectionMatrix();
 			refreshActiveMode();
+			syncSky();
 			terrainSystem.update(camera.position);
 		},
-		updateFade() {
+		updateFog() {
 			terrainSystem.update(camera.position);
 			syncSky();
 		},
@@ -151,7 +152,8 @@ export function startApp() {
 	}
 
 	function syncSky() {
-		sky.update(camera.position, settings, lights);
+		const atmosphere = sky.update(camera.position, settings, lights);
+		terrainSystem.setAtmosphere(atmosphere);
 	}
 
 	function renderScene() {

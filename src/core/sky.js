@@ -93,6 +93,7 @@ export function createSky(seed = 1) {
 	const sky = createSkyRig(seed);
 	skyScene.add(sky.skyGroup);
 	const solarState = createSolarState();
+	const atmosphereState = createAtmosphereState();
 
 	return {
 		update(cameraPosition, settings, lights) {
@@ -100,10 +101,26 @@ export function createSky(seed = 1) {
 			updateSkyRig(sky, cameraPosition, solarState);
 			const horizonColor = updateSkyAppearance(sky, solarState, settings.season);
 			updateSkyLighting(lights, sky, cameraPosition, sky.sunRoot.position, solarState, horizonColor, settings.season);
+			atmosphereState.topColor.copy(sky.skyColor);
+			atmosphereState.upperColor.copy(sky.skyUpperColor);
+			atmosphereState.horizonColor.copy(sky.horizonColor);
+			atmosphereState.bottomColor.copy(sky.bottomColor);
+			atmosphereState.sunDirection.copy(solarState.sunDirection);
+			return atmosphereState;
 		},
 		render(renderer, camera) {
 			renderer.render(skyScene, camera);
 		},
+	};
+}
+
+function createAtmosphereState() {
+	return {
+		topColor: new THREE.Color(),
+		upperColor: new THREE.Color(),
+		horizonColor: new THREE.Color(),
+		bottomColor: new THREE.Color(),
+		sunDirection: new THREE.Vector3(),
 	};
 }
 
@@ -175,6 +192,7 @@ function createSkyDomeMaterial() {
 			upperColor: { value: DAY_HORIZON.clone() },
 			horizonColor: { value: DAY_HORIZON.clone() },
 			bottomColor: { value: DAY_LOW_SKY.clone() },
+			skyCameraPosition: { value: new THREE.Vector3() },
 		},
 		vertexShader: `
 			varying vec3 vWorldPosition;
@@ -189,10 +207,11 @@ function createSkyDomeMaterial() {
 			uniform vec3 upperColor;
 			uniform vec3 horizonColor;
 			uniform vec3 bottomColor;
+			uniform vec3 skyCameraPosition;
 			varying vec3 vWorldPosition;
 
 			void main() {
-				vec3 direction = normalize(vWorldPosition);
+				vec3 direction = normalize(vWorldPosition - skyCameraPosition);
 				float t = clamp(direction.y * 0.5 + 0.5, 0.0, 1.0);
 				float horizonBlend = smoothstep(0.0, 0.42, t);
 				float upperBlend = smoothstep(0.22, 0.78, t);
@@ -307,6 +326,7 @@ function computeSolarState(state, timeOfDay, season) {
 
 function updateSkyRig(sky, cameraPosition, solarState) {
 	sky.skyGroup.position.copy(cameraPosition);
+	sky.gradientMaterial.uniforms.skyCameraPosition.value.copy(cameraPosition);
 	sky.sunPosition.copy(solarState.sunDirection).multiplyScalar(760);
 	sky.sunRoot.position.copy(sky.sunPosition);
 	sky.starsRoot.quaternion.setFromAxisAngle(sky.poleAxis, solarState.siderealAngle);

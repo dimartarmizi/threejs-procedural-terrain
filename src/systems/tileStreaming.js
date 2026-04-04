@@ -1,9 +1,10 @@
-import { applyDistanceFade, setupDistanceFadeMaterial } from '../core/distanceFade.js';
+import { applyFog, setupFogMaterial } from '../core/fog.js';
 
 export function createTileStreamingController(terrain, scene, settings) {
 	const tiles = new Map();
 	const tileCreationBudget = 1;
 	let needsRefresh = true;
+	let atmosphereState = null;
 
 	function markDirty() {
 		needsRefresh = true;
@@ -24,7 +25,19 @@ export function createTileStreamingController(terrain, scene, settings) {
 		missingTiles.sort(sortByPriority);
 		createQueuedTiles(missingTiles, tileCreationBudget, terrain, scene, settings.wireframe, tiles);
 		removeUnusedTiles(scene, tiles, neededTiles);
-		applyDistanceFade(tiles, cameraPosition, terrain.tileSize, settings.renderDistance, settings.fadeDensity);
+		applyFog(
+			tiles,
+			cameraPosition,
+			terrain,
+			settings.renderDistance,
+			settings.fogDistance,
+			settings.fogEnabled,
+			atmosphereState
+		);
+	}
+
+	function setAtmosphere(nextAtmosphereState) {
+		atmosphereState = nextAtmosphereState;
 	}
 
 	function setWireframe(enabled) {
@@ -37,6 +50,7 @@ export function createTileStreamingController(terrain, scene, settings) {
 	return {
 		markDirty,
 		update,
+		setAtmosphere,
 		setWireframe,
 	};
 }
@@ -70,7 +84,7 @@ function createQueuedTiles(missingTiles, tileCreationBudget, terrain, scene, wir
 		}
 
 		const tile = terrain.createTileMesh(tileInfo.tileX, tileInfo.tileZ, wireframe);
-		setupDistanceFadeMaterial(tile.material);
+		setupFogMaterial(tile.material);
 		tile.receiveShadow = true;
 		tile.castShadow = false;
 		scene.add(tile);

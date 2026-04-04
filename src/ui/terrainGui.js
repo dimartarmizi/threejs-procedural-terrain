@@ -42,8 +42,9 @@ export function createTerrainGui(settings, handlers) {
 	terrainFolder.add(settings, 'mode', ['orbit', 'player', 'drive', 'fly']).onChange(handlers.updateMode);
 	terrainFolder.open();
 
-	const fadeFolder = gui.addFolder('Distance Fade');
-	fadeFolder.add(settings, 'fadeDensity', 0, 0.02, 0.0001).onChange(handlers.updateFade);
+	const fogFolder = gui.addFolder('Fog');
+	fogFolder.add(settings, 'fogEnabled').name('enabled').onChange(handlers.updateFog);
+	fogFolder.add(settings, 'fogDistance', 0.5, 2.5, 0.01).name('distance').onChange(handlers.updateFog);
 
 	const skyFolder = gui.addFolder('Sky');
 	skyFolder.add(settings, 'timeEnabled').name('time on/off').onChange(handlers.updateLight);
