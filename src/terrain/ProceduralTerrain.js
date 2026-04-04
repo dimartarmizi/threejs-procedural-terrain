@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { getTerrainOptions } from './config.js';
 import { createSimplexNoise2D } from './noise.js';
-import { getTerrainColor } from './color.js';
+import { getTerrainColorByHeight } from './color.js';
 
 function clamp(value, min, max) {
 	return Math.max(min, Math.min(max, value));
@@ -60,7 +60,7 @@ export class ProceduralTerrain {
 			position.setY(index, height);
 
 			const normalizedHeight = (height - this.baseHeight) / this.heightMultiplier;
-			getTerrainColor(normalizedHeight, color);
+			getTerrainColorByHeight(height, normalizedHeight, color);
 			const colorOffset = index * 3;
 
 			colorAttribute[colorOffset] = color.r;
@@ -72,7 +72,7 @@ export class ProceduralTerrain {
 		geometry.computeVertexNormals();
 
 		const material = new THREE.MeshStandardMaterial({
-			color: 0x7f8f73,
+			color: 0xffffff,
 			roughness: 1,
 			metalness: 0,
 			vertexColors: true,
