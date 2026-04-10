@@ -1,4 +1,6 @@
-export const settings = {
+const STORAGE_KEY = 'terrain-settings';
+
+export const defaultSettings = {
 	seed: 1,
 	tileSize: 128,
 	terrainType: '',
@@ -13,7 +15,7 @@ export const settings = {
 	gridHelper: false,
 	mode: 'orbit',
 	fogEnabled: true,
-	fogDistance: 2,
+	fogDistance: 1.3,
 	waterEnabled: true,
 	postProcessingEnabled: false,
 	fxaaEnabled: false,
@@ -32,3 +34,20 @@ export const settings = {
 	cloudBaseHeight: 220,
 	cloudTopHeight: 760,
 };
+
+export const settings = { ...defaultSettings };
+
+export function loadSettingsFromStorage() {
+	Object.assign(settings, JSON.parse(localStorage.getItem(STORAGE_KEY)));
+}
+
+export function saveSettingsToStorage() {
+	localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+}
+
+export function resetSettingsToDefault() {
+	Object.assign(settings, defaultSettings);
+	saveSettingsToStorage();
+}
+
+loadSettingsFromStorage();

@@ -1,5 +1,6 @@
 import { GUI } from 'lil-gui';
 import { TERRAIN_PRESETS } from '../terrain/presets.js';
+import { resetSettingsToDefault, saveSettingsToStorage } from '../const/settings.js';
 
 function applyTerrainPreset(settings, terrainType) {
 	const preset = TERRAIN_PRESETS[terrainType];
@@ -17,74 +18,132 @@ function getTerrainPresetOptions() {
 	}, { none: '' });
 }
 
+function toTitleCase(text) {
+	return text
+		.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+		.replace(/[_-]+/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function createTerrainGui(settings, handlers) {
 	const gui = new GUI({ title: 'Terrain Settings' });
 	gui.domElement.classList.add('terrain-gui');
+	const sync = (handler, value) => {
+		handler(value);
+		saveSettingsToStorage();
+	};
 
-	const terrainFolder = gui.addFolder('Terrain');
-	terrainFolder
-		.add(settings, 'terrainType', getTerrainPresetOptions())
-		.name('preset')
-		.onChange((terrainType) => {
-			applyTerrainPreset(settings, terrainType);
-			handlers.updateTerrain();
-		});
-	terrainFolder.add(settings, 'seed').onFinishChange(handlers.updateTerrain);
-	terrainFolder.add(settings, 'scale', 80, 1000, 1).name('scale').onFinishChange(handlers.updateTerrain).listen();
-	terrainFolder.add(settings, 'heightMultiplier', 0, 500, 1).name('height multiplier').onFinishChange(handlers.updateTerrain).listen();
-	terrainFolder.add(settings, 'baseHeight', -100, 500, 1).name('base height').onFinishChange(handlers.updateTerrain).listen();
-	terrainFolder.add(settings, 'octaves', 1, 8, 1).onFinishChange(handlers.updateTerrain).listen();
-	terrainFolder.add(settings, 'persistence', 0.1, 1, 0.01).onFinishChange(handlers.updateTerrain).listen();
-	terrainFolder.add(settings, 'lacunarity', 1, 4, 0.01).onFinishChange(handlers.updateTerrain).listen();
-	terrainFolder.add(settings, 'renderDistance', 1, 32, 1).onFinishChange(handlers.updateTerrain);
-	terrainFolder.add(settings, 'wireframe').onChange(handlers.updateWireframe);
-	terrainFolder.add(settings, 'gridHelper').onChange(handlers.updateGridHelper);
-	terrainFolder.add(settings, 'mode', ['orbit', 'player', 'drive', 'fly']).onChange(handlers.updateMode);
-	terrainFolder.open();
+	function addControl(folder, cfg) {
+		const c =
+			cfg.options !== undefined
+				? folder.add(settings, cfg.key, cfg.options)
+				: cfg.min !== undefined
+					? folder.add(settings, cfg.key, cfg.min, cfg.max, cfg.step)
+					: folder.add(settings, cfg.key);
+		c.name(toTitleCase(cfg.name || cfg.key));
+		if (cfg.listen) c.listen();
+		c[cfg.useFinish ? 'onFinishChange' : 'onChange']((value) => sync(cfg.handler, value));
+		return c;
+	}
 
-	const fogFolder = gui.addFolder('Fog');
-	fogFolder.add(settings, 'fogEnabled').name('enabled').onChange(handlers.updateFog);
-	fogFolder.add(settings, 'fogDistance', 0.5, 2.5, 0.01).name('distance').onChange(handlers.updateFog);
+	const addMany = (folder, list) => list.forEach((cfg) => addControl(folder, cfg));
+	const refreshAll = () => {
+		handlers.updateTerrain();
+		handlers.updateFog();
+		handlers.updateLight();
+		handlers.updateWater();
+		handlers.updatePostProcessing();
+		handlers.updateWireframe();
+		handlers.updateGridHelper();
+		handlers.updateMode();
+	};
 
-	const skyFolder = gui.addFolder('Sky');
-	skyFolder.add(settings, 'timeEnabled').name('time on/off').onChange(handlers.updateLight);
-	skyFolder.add(settings, 'timeScale', 0, 4, 0.01).name('timeScale').onChange(handlers.updateLight);
-	skyFolder.add(settings, 'timeOfDay', 0, 24, 0.1).name('timeOfDay').onChange(handlers.updateLight).listen();
-	skyFolder.add(settings, 'season', ['spring', 'summer', 'autumn', 'winter']).name('season').onChange(handlers.updateLight);
+	function resetToDefaults() {
+		resetSettingsToDefault();
+		refreshAll();
+		gui.controllersRecursive().forEach((controller) => controller.updateDisplay());
+	}
 
-	const cloudFolder = gui.addFolder('Clouds');
-	cloudFolder.add(settings, 'cloudEnabled').name('enabled').onChange(handlers.updateLight);
-	const cloudCoverageController = cloudFolder
-		.add(settings, 'cloudCoverage', 0.2, 0.95, 0.01)
-		.name('coverage')
-		.onChange(handlers.updateLight)
-		.listen();
-	const cloudDensityController = cloudFolder
-		.add(settings, 'cloudDensity', 0.2, 1.5, 0.01)
-		.name('density')
-		.onChange(handlers.updateLight)
-		.listen();
-	const cloudOpacityController = cloudFolder
-		.add(settings, 'cloudOpacity', 0.2, 1, 0.01)
-		.name('opacity')
-		.onChange(handlers.updateLight)
-		.listen();
-	cloudCoverageController.updateDisplay();
-	cloudDensityController.updateDisplay();
-	cloudOpacityController.updateDisplay();
-	cloudFolder.add(settings, 'cloudSpeed', 0, 3, 0.01).name('speed').onChange(handlers.updateLight);
-	cloudFolder.add(settings, 'cloudBaseHeight', 80, 1200, 1).name('base height').onChange(handlers.updateLight);
-	cloudFolder.add(settings, 'cloudTopHeight', 200, 2000, 1).name('top height').onChange(handlers.updateLight);
+	gui.add({ resetDefault: resetToDefaults }, 'resetDefault').name('Reset Default');
 
-	const waterFolder = gui.addFolder('Water');
-	waterFolder.add(settings, 'waterEnabled').name('enabled').onChange(handlers.updateWater);
+	const folders = [
+		{
+			name: 'Terrain',
+			open: true,
+			controls: [
+				{
+					key: 'terrainType',
+					name: 'preset',
+					options: getTerrainPresetOptions(),
+					handler: (terrainType) => {
+						applyTerrainPreset(settings, terrainType);
+						handlers.updateTerrain();
+					},
+				},
+				{ key: 'seed', handler: handlers.updateTerrain, useFinish: true },
+				{ key: 'scale', min: 80, max: 1000, step: 1, name: 'scale', listen: true, handler: handlers.updateTerrain, useFinish: true },
+				{ key: 'heightMultiplier', min: 0, max: 500, step: 1, name: 'height multiplier', listen: true, handler: handlers.updateTerrain, useFinish: true },
+				{ key: 'baseHeight', min: -100, max: 500, step: 1, name: 'base height', listen: true, handler: handlers.updateTerrain, useFinish: true },
+				{ key: 'octaves', min: 1, max: 8, step: 1, listen: true, handler: handlers.updateTerrain, useFinish: true },
+				{ key: 'persistence', min: 0.1, max: 1, step: 0.01, listen: true, handler: handlers.updateTerrain, useFinish: true },
+				{ key: 'lacunarity', min: 1, max: 4, step: 0.01, listen: true, handler: handlers.updateTerrain, useFinish: true },
+				{ key: 'renderDistance', min: 1, max: 32, step: 1, handler: handlers.updateTerrain, useFinish: true },
+				{ key: 'wireframe', handler: handlers.updateWireframe },
+				{ key: 'gridHelper', handler: handlers.updateGridHelper },
+				{ key: 'mode', options: ['orbit', 'player', 'drive', 'fly'], handler: handlers.updateMode },
+			],
+		},
+		{
+			name: 'Fog',
+			controls: [
+				{ key: 'fogEnabled', name: 'enabled', handler: handlers.updateFog },
+				{ key: 'fogDistance', min: 0.5, max: 2.5, step: 0.01, name: 'distance', handler: handlers.updateFog },
+			],
+		},
+		{
+			name: 'Sky',
+			controls: [
+				{ key: 'timeEnabled', name: 'time on/off', handler: handlers.updateLight },
+				{ key: 'timeScale', min: 0, max: 4, step: 0.01, name: 'timeScale', handler: handlers.updateLight },
+				{ key: 'timeOfDay', min: 0, max: 24, step: 0.1, name: 'timeOfDay', listen: true, handler: handlers.updateLight },
+				{ key: 'season', options: ['spring', 'summer', 'autumn', 'winter'], name: 'season', handler: handlers.updateLight },
+			],
+		},
+		{
+			name: 'Clouds',
+			controls: [
+				{ key: 'cloudEnabled', name: 'enabled', handler: handlers.updateLight },
+				{ key: 'cloudCoverage', min: 0.2, max: 0.95, step: 0.01, name: 'coverage', listen: true, handler: handlers.updateLight },
+				{ key: 'cloudDensity', min: 0.2, max: 1.5, step: 0.01, name: 'density', listen: true, handler: handlers.updateLight },
+				{ key: 'cloudOpacity', min: 0.2, max: 1, step: 0.01, name: 'opacity', listen: true, handler: handlers.updateLight },
+				{ key: 'cloudSpeed', min: 0, max: 3, step: 0.01, name: 'speed', handler: handlers.updateLight },
+				{ key: 'cloudBaseHeight', min: 80, max: 1200, step: 1, name: 'base height', handler: handlers.updateLight },
+				{ key: 'cloudTopHeight', min: 200, max: 2000, step: 1, name: 'top height', handler: handlers.updateLight },
+			],
+		},
+		{
+			name: 'Water',
+			controls: [{ key: 'waterEnabled', name: 'enabled', handler: handlers.updateWater }],
+		},
+		{
+			name: 'Post Processing',
+			controls: [
+				{ key: 'postProcessingEnabled', name: 'enabled', handler: handlers.updatePostProcessing },
+				{ key: 'fxaaEnabled', name: 'fxaa', handler: handlers.updatePostProcessing },
+				{ key: 'bloomStrength', min: 0, max: 2, step: 0.01, name: 'bloom strength', handler: handlers.updatePostProcessing },
+				{ key: 'bloomRadius', min: 0, max: 1, step: 0.01, name: 'bloom radius', handler: handlers.updatePostProcessing },
+				{ key: 'bloomThreshold', min: 0, max: 1.5, step: 0.01, name: 'bloom threshold', handler: handlers.updatePostProcessing },
+			],
+		},
+	];
 
-	const postFolder = gui.addFolder('Post Processing');
-	postFolder.add(settings, 'postProcessingEnabled').name('enabled').onChange(handlers.updatePostProcessing);
-	postFolder.add(settings, 'fxaaEnabled').name('fxaa').onChange(handlers.updatePostProcessing);
-	postFolder.add(settings, 'bloomStrength', 0, 2, 0.01).name('bloom strength').onChange(handlers.updatePostProcessing);
-	postFolder.add(settings, 'bloomRadius', 0, 1, 0.01).name('bloom radius').onChange(handlers.updatePostProcessing);
-	postFolder.add(settings, 'bloomThreshold', 0, 1.5, 0.01).name('bloom threshold').onChange(handlers.updatePostProcessing);
+	folders.forEach((cfg) => {
+		const folder = gui.addFolder(cfg.name);
+		addMany(folder, cfg.controls);
+		if (cfg.open) folder.open();
+	});
 
 	return gui;
 }
