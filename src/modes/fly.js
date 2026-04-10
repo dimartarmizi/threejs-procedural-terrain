@@ -172,6 +172,7 @@ export function createFlyMode(camera, scene) {
 	return {
 		setEnabled,
 		update,
+		updateCamera,
 		dispose,
 		get vehicle() {
 			return vehicle;

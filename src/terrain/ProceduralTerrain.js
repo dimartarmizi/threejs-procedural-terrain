@@ -47,29 +47,7 @@ export class ProceduralTerrain {
 		const geometry = new THREE.PlaneGeometry(this.tileSize, this.tileSize, this.tileResolution, this.tileResolution);
 		geometry.rotateX(-Math.PI / 2);
 
-		const position = geometry.attributes.position;
-		const colorAttribute = new Float32Array(position.count * 3);
-		const worldOffsetX = tileX * this.tileSize;
-		const worldOffsetZ = tileZ * this.tileSize;
-		const color = new THREE.Color();
-
-		for (let index = 0; index < position.count; index += 1) {
-			const worldX = worldOffsetX + position.getX(index);
-			const worldZ = worldOffsetZ + position.getZ(index);
-			const height = this.sampleHeight(worldX, worldZ);
-			position.setY(index, height);
-
-			const normalizedHeight = (height - this.baseHeight) / this.heightMultiplier;
-			getTerrainColorByHeight(height, normalizedHeight, color);
-			const colorOffset = index * 3;
-
-			colorAttribute[colorOffset] = color.r;
-			colorAttribute[colorOffset + 1] = color.g;
-			colorAttribute[colorOffset + 2] = color.b;
-		}
-
-		geometry.setAttribute('color', new THREE.Float32BufferAttribute(colorAttribute, 3));
-		geometry.computeVertexNormals();
+		this.updateTileGeometry(geometry, tileX * this.tileSize, tileZ * this.tileSize);
 
 		const material = new THREE.MeshStandardMaterial({
 			color: 0xffffff,
@@ -85,5 +63,41 @@ export class ProceduralTerrain {
 		mesh.userData.tileX = tileX;
 		mesh.userData.tileZ = tileZ;
 		return mesh;
+	}
+
+	updateTileMesh(tile) {
+		this.updateTileGeometry(tile.geometry, tile.position.x, tile.position.z);
+	}
+
+	updateTileGeometry(geometry, worldOffsetX, worldOffsetZ) {
+		const position = geometry.attributes.position;
+		let colorAttribute = geometry.attributes.color;
+		if (!colorAttribute) {
+			colorAttribute = new THREE.Float32BufferAttribute(new Float32Array(position.count * 3), 3);
+			geometry.setAttribute('color', colorAttribute);
+		}
+		const color = new THREE.Color();
+
+		for (let index = 0; index < position.count; index += 1) {
+			const worldX = worldOffsetX + position.getX(index);
+			const worldZ = worldOffsetZ + position.getZ(index);
+			const height = this.sampleHeight(worldX, worldZ);
+			position.setY(index, height);
+
+			const normalizedHeight = (height - this.baseHeight) / this.heightMultiplier;
+			getTerrainColorByHeight(height, normalizedHeight, color);
+			const colorOffset = index * 3;
+
+			colorAttribute.array[colorOffset] = color.r;
+			colorAttribute.array[colorOffset + 1] = color.g;
+			colorAttribute.array[colorOffset + 2] = color.b;
+		}
+
+		position.needsUpdate = true;
+		colorAttribute.needsUpdate = true;
+		geometry.computeVertexNormals();
+		geometry.attributes.normal.needsUpdate = true;
+		geometry.computeBoundingBox();
+		geometry.computeBoundingSphere();
 	}
 }

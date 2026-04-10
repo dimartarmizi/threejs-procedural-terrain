@@ -128,6 +128,7 @@ export function createDriveMode(camera, scene, terrainSystem) {
 		setEnabled,
 		update,
 		placeOnGround,
+		updateCamera,
 		dispose,
 		get vehicle() {
 			return vehicle;

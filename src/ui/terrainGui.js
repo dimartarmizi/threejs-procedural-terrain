@@ -30,12 +30,12 @@ export function createTerrainGui(settings, handlers) {
 			handlers.updateTerrain();
 		});
 	terrainFolder.add(settings, 'seed').onFinishChange(handlers.updateTerrain);
-	terrainFolder.add(settings, 'scale', 80, 1000, 1).name('scale').onChange(handlers.updateTerrain).listen();
-	terrainFolder.add(settings, 'heightMultiplier', 0, 500, 1).name('height multiplier').onChange(handlers.updateTerrain).listen();
-	terrainFolder.add(settings, 'baseHeight', -100, 500, 1).name('base height').onChange(handlers.updateTerrain).listen();
+	terrainFolder.add(settings, 'scale', 80, 1000, 1).name('scale').onFinishChange(handlers.updateTerrain).listen();
+	terrainFolder.add(settings, 'heightMultiplier', 0, 500, 1).name('height multiplier').onFinishChange(handlers.updateTerrain).listen();
+	terrainFolder.add(settings, 'baseHeight', -100, 500, 1).name('base height').onFinishChange(handlers.updateTerrain).listen();
 	terrainFolder.add(settings, 'octaves', 1, 8, 1).onFinishChange(handlers.updateTerrain).listen();
-	terrainFolder.add(settings, 'persistence', 0.1, 1, 0.01).onChange(handlers.updateTerrain).listen();
-	terrainFolder.add(settings, 'lacunarity', 1, 4, 0.01).onChange(handlers.updateTerrain).listen();
+	terrainFolder.add(settings, 'persistence', 0.1, 1, 0.01).onFinishChange(handlers.updateTerrain).listen();
+	terrainFolder.add(settings, 'lacunarity', 1, 4, 0.01).onFinishChange(handlers.updateTerrain).listen();
 	terrainFolder.add(settings, 'renderDistance', 1, 32, 1).onFinishChange(handlers.updateTerrain);
 	terrainFolder.add(settings, 'wireframe').onChange(handlers.updateWireframe);
 	terrainFolder.add(settings, 'gridHelper').onChange(handlers.updateGridHelper);

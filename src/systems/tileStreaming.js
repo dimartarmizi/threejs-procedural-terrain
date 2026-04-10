@@ -6,22 +6,20 @@ export function createTileStreamingController(terrain, scene, settings) {
 	const waterTiles = new Map();
 	const tileCreationBudget = 1;
 	const state = {
-		needsRefresh: true,
+		needsTerrainRefresh: true,
 		atmosphereState: null,
 		lightingState: null,
 		waterSurface: null,
 	};
 
 	function markDirty() {
-		state.needsRefresh = true;
+		state.needsTerrainRefresh = true;
 	}
 
 	function update(cameraPosition) {
-		if (state.needsRefresh) {
-			clearTiles(scene, tiles);
-			clearWaterTiles(scene, waterTiles);
-			disposeWaterSurface(state);
-			state.needsRefresh = false;
+		if (state.needsTerrainRefresh) {
+			refreshTiles(tiles, terrain);
+			state.needsTerrainRefresh = false;
 		}
 
 		const centerX = Math.round(cameraPosition.x / terrain.tileSize);
@@ -67,6 +65,12 @@ export function createTileStreamingController(terrain, scene, settings) {
 		setLighting,
 		setWireframe,
 	};
+}
+
+function refreshTiles(tiles, terrain) {
+	tiles.forEach(function (tile) {
+		terrain.updateTileMesh(tile);
+	});
 }
 
 function collectNeededTiles(renderDistance, centerX, centerZ, tiles, neededTiles, missingTiles) {

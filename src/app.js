@@ -155,7 +155,12 @@ export function startApp() {
 
 	function refreshActiveMode() {
 		if (activeMode) {
-			activeMode.setEnabled(true);
+			if (typeof activeMode.placeOnGround === 'function') {
+				activeMode.placeOnGround();
+			}
+			if (typeof activeMode.updateCamera === 'function') {
+				activeMode.updateCamera();
+			}
 			renderer.domElement.focus({ preventScroll: true });
 		}
 	}
