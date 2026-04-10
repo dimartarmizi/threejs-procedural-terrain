@@ -45,6 +45,7 @@ export function startApp() {
 	let fps = 0;
 	let cpuUsage = 0;
 
+	controls.screenSpacePanning = false;
 	controls.target.set(0, 20, 0);
 	controls.enableDamping = true;
 
