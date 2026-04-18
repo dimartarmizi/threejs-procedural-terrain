@@ -4,6 +4,7 @@ export const defaultSettings = {
 	seed: 1,
 	tileSize: 128,
 	terrainType: '',
+	colorMode: 'biome',
 	scale: 1000,
 	heightMultiplier: 100,
 	baseHeight: 30,

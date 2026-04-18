@@ -23,6 +23,8 @@ export class ProceduralTerrain {
 		this.persistence = nextOptions.persistence;
 		this.lacunarity = nextOptions.lacunarity;
 		this.seed = nextOptions.seed;
+		this.terrainType = nextOptions.terrainType || '';
+		this.colorMode = nextOptions.colorMode || 'biome';
 		this.tileResolution = 48;
 
 		this.noise = createSimplexNoise2D(this.seed, {
@@ -85,7 +87,8 @@ export class ProceduralTerrain {
 			position.setY(index, height);
 
 			const normalizedHeight = (height - this.baseHeight) / this.heightMultiplier;
-			getTerrainColorByHeight(height, normalizedHeight, color);
+			const slope = this.sampleSlope(worldX, worldZ);
+			getTerrainColorByHeight(height, normalizedHeight, slope, this.colorMode, this.terrainType, color);
 			const colorOffset = index * 3;
 
 			colorAttribute.array[colorOffset] = color.r;
@@ -99,5 +102,18 @@ export class ProceduralTerrain {
 		geometry.attributes.normal.needsUpdate = true;
 		geometry.computeBoundingBox();
 		geometry.computeBoundingSphere();
+	}
+
+	sampleSlope(worldX, worldZ) {
+		const sampleDistance = this.tileSize / this.tileResolution;
+		const heightLeft = this.sampleHeight(worldX - sampleDistance, worldZ);
+		const heightRight = this.sampleHeight(worldX + sampleDistance, worldZ);
+		const heightDown = this.sampleHeight(worldX, worldZ - sampleDistance);
+		const heightUp = this.sampleHeight(worldX, worldZ + sampleDistance);
+		const slopeX = (heightRight - heightLeft) / (sampleDistance * 2);
+		const slopeZ = (heightUp - heightDown) / (sampleDistance * 2);
+		const steepness = Math.sqrt(slopeX * slopeX + slopeZ * slopeZ);
+
+		return Math.atan(steepness) / (Math.PI / 2);
 	}
 }

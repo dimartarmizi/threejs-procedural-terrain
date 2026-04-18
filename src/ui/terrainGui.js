@@ -82,6 +82,12 @@ export function createTerrainGui(settings, handlers) {
 						handlers.updateTerrain();
 					},
 				},
+				{
+					key: 'colorMode',
+					name: 'color mode',
+					options: { biome: 'biome', theme: 'single theme' },
+					handler: handlers.updateTerrain,
+				},
 				{ key: 'seed', handler: handlers.updateTerrain, useFinish: true },
 				{ key: 'scale', min: 80, max: 1000, step: 1, name: 'scale', listen: true, handler: handlers.updateTerrain, useFinish: true },
 				{ key: 'heightMultiplier', min: 0, max: 500, step: 1, name: 'height multiplier', listen: true, handler: handlers.updateTerrain, useFinish: true },
