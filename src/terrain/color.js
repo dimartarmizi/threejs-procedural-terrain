@@ -3,17 +3,6 @@ import * as THREE from 'three';
 const LOWLAND_HEIGHT_THRESHOLD = 2;
 const LOWLAND_BLEND_HEIGHT = 10;
 const SAND_COLOR = new THREE.Color(0xd8bd79);
-const TEMP_COLOR = new THREE.Color();
-const TEMP_COLOR_A = new THREE.Color();
-const TEMP_COLOR_B = new THREE.Color();
-
-const TERRAIN_COLOR_STOPS = [
-	{ threshold: -0.18, color: new THREE.Color(0x3f5f43) },
-	{ threshold: -0.02, color: new THREE.Color(0x5e8736) },
-	{ threshold: 0.18, color: new THREE.Color(0x7ca246) },
-	{ threshold: 0.42, color: new THREE.Color(0xb2cf6c) },
-	{ threshold: 0.62, color: new THREE.Color(0xe2dece) },
-];
 
 const BIOME_COLOR_STOPS = {
 	plain: [
@@ -65,91 +54,233 @@ const THEME_PALETTES = {
 	],
 };
 
-function clamp(value, min, max) {
-	return Math.max(min, Math.min(max, value));
+const TERRAIN_COLOR_MODE = {
+	biome: 0,
+	theme: 1,
+};
+
+const TERRAIN_TYPE_ID = {
+	'': 0,
+	hills: 1,
+	mountains: 2,
+	desert: 3,
+};
+
+function colorToVec3Literal(color) {
+	return `vec3(${color.r.toFixed(6)}, ${color.g.toFixed(6)}, ${color.b.toFixed(6)})`;
 }
 
-function smoothstep(edge0, edge1, value) {
-	const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
-	return t * t * (3 - 2 * t);
-}
-
-export function getTerrainColorHex(normalizedHeight) {
-	return getTerrainColor(normalizedHeight, TEMP_COLOR).getHex();
-}
-
-export function getTerrainColor(normalizedHeight, color = new THREE.Color()) {
-	return sampleColorStops(TERRAIN_COLOR_STOPS, normalizedHeight, color);
-}
-
-function sampleColorStops(stops, normalizedValue, color = new THREE.Color()) {
-	const firstStop = stops[0];
-
-	if (normalizedValue <= firstStop.threshold) {
-		return color.copy(firstStop.color);
+function buildColorStops3Function(functionName, stops) {
+	return `vec3 ${functionName}(float value) {
+	if (value <= ${stops[0].threshold.toFixed(2)}) {
+		return ${colorToVec3Literal(stops[0].color)};
 	}
 
-	for (let index = 1; index < stops.length; index += 1) {
-		const lowerStop = stops[index - 1];
-		const upperStop = stops[index];
-
-		if (normalizedValue <= upperStop.threshold) {
-			const blend = smoothstep(lowerStop.threshold, upperStop.threshold, normalizedValue);
-			return color.copy(lowerStop.color).lerp(upperStop.color, blend);
-		}
+	if (value <= ${stops[1].threshold.toFixed(2)}) {
+		return mix(${colorToVec3Literal(stops[0].color)}, ${colorToVec3Literal(stops[1].color)}, smoothstep(${stops[0].threshold.toFixed(2)}, ${stops[1].threshold.toFixed(2)}, value));
 	}
 
-	return color.copy(stops[stops.length - 1].color);
+	if (value <= ${stops[2].threshold.toFixed(2)}) {
+		return mix(${colorToVec3Literal(stops[1].color)}, ${colorToVec3Literal(stops[2].color)}, smoothstep(${stops[1].threshold.toFixed(2)}, ${stops[2].threshold.toFixed(2)}, value));
+	}
+
+	return ${colorToVec3Literal(stops[2].color)};
+}`;
 }
 
-function getThemePalette(terrainType) {
-	return THEME_PALETTES[terrainType] || THEME_PALETTES.default;
+function buildColorStops4Function(functionName, stops) {
+	return `vec3 ${functionName}(float value) {
+	if (value <= ${stops[0].threshold.toFixed(2)}) {
+		return ${colorToVec3Literal(stops[0].color)};
+	}
+
+	if (value <= ${stops[1].threshold.toFixed(2)}) {
+		return mix(${colorToVec3Literal(stops[0].color)}, ${colorToVec3Literal(stops[1].color)}, smoothstep(${stops[0].threshold.toFixed(2)}, ${stops[1].threshold.toFixed(2)}, value));
+	}
+
+	if (value <= ${stops[2].threshold.toFixed(2)}) {
+		return mix(${colorToVec3Literal(stops[1].color)}, ${colorToVec3Literal(stops[2].color)}, smoothstep(${stops[1].threshold.toFixed(2)}, ${stops[2].threshold.toFixed(2)}, value));
+	}
+
+	if (value <= ${stops[3].threshold.toFixed(2)}) {
+		return mix(${colorToVec3Literal(stops[2].color)}, ${colorToVec3Literal(stops[3].color)}, smoothstep(${stops[2].threshold.toFixed(2)}, ${stops[3].threshold.toFixed(2)}, value));
+	}
+
+	return ${colorToVec3Literal(stops[3].color)};
+}`;
 }
 
-function sampleBiomeTerrainColor(terrainType, normalizedHeight, slope, color = new THREE.Color()) {
-	if (terrainType === 'desert') {
-		return sampleColorStops(BIOME_COLOR_STOPS.desert, normalizedHeight, color);
-	}
-
-	const plainColor = sampleColorStops(BIOME_COLOR_STOPS.plain, normalizedHeight, color);
-	const hillColor = sampleColorStops(BIOME_COLOR_STOPS.hill, normalizedHeight, TEMP_COLOR_A);
-	const mountainColor = sampleColorStops(BIOME_COLOR_STOPS.mountain, normalizedHeight, TEMP_COLOR_B);
-
-	const lowHeightFade = smoothstep(-0.08, 0.12, normalizedHeight);
-	const hillFromHeight = smoothstep(0.12, 0.46, normalizedHeight);
-	const hillFromSlope = smoothstep(0.2, 0.44, slope);
-	let hillBlend = Math.max(hillFromHeight, hillFromSlope) * lowHeightFade;
-
-	const mountainFromHeight = smoothstep(0.5, 0.82, normalizedHeight);
-	const mountainFromSlope = smoothstep(0.48, 0.78, slope);
-	let mountainBlend = Math.max(mountainFromHeight, mountainFromSlope) * lowHeightFade;
-
-	if (terrainType === 'hills') {
-		hillBlend = Math.max(hillBlend, 0.5);
-	}
-
-	if (terrainType === 'mountains') {
-		mountainBlend = Math.max(mountainBlend, 0.65);
-	}
-
-	hillBlend = clamp(hillBlend, 0, 1);
-	mountainBlend = clamp(Math.max(mountainBlend, hillBlend * 0.15), 0, 1);
-	const effectiveHillBlend = hillBlend * (1 - mountainBlend * 0.9);
-	const mountainDominance = smoothstep(0.18, 0.78, mountainBlend);
-
-	return plainColor.lerp(hillColor, effectiveHillBlend).lerp(mountainColor, mountainDominance);
+function getTerrainColorModeValue(colorMode) {
+	return TERRAIN_COLOR_MODE[colorMode] ?? TERRAIN_COLOR_MODE.biome;
 }
 
-export function getTerrainColorByHeight(height, normalizedHeight, slope, colorMode = 'biome', terrainType = '', color = new THREE.Color()) {
-	const terrainColor = colorMode === 'theme'
-		? sampleColorStops(getThemePalette(terrainType), normalizedHeight, TEMP_COLOR)
-		: sampleBiomeTerrainColor(terrainType, normalizedHeight, slope, TEMP_COLOR);
+function getTerrainTypeId(terrainType) {
+	return TERRAIN_TYPE_ID[terrainType] ?? TERRAIN_TYPE_ID[''];
+}
 
-	const lowlandWeight = 1 - smoothstep(LOWLAND_HEIGHT_THRESHOLD - 8, LOWLAND_BLEND_HEIGHT + 4, height);
-	const shorelineWeight = 1 - smoothstep(-0.28, 0.08, normalizedHeight);
-	const baseSandWeight = clamp(lowlandWeight * 0.78 + shorelineWeight * 0.46, 0, 1);
-	const slopeAttenuation = 1 - smoothstep(0.45, 0.9, slope);
-	const sandWeight = clamp(baseSandWeight * (0.65 + slopeAttenuation * 0.35), 0, 1);
+function buildTerrainShaderSource() {
+	return [
+		`float terrainSlope(vec3 worldNormal) {
+			return acos(clamp(abs(worldNormal.y), 0.0, 1.0)) / 1.57079632679;
+		}`,
+		buildColorStops3Function('sampleBiomePlainColor', BIOME_COLOR_STOPS.plain),
+		buildColorStops3Function('sampleBiomeHillColor', BIOME_COLOR_STOPS.hill),
+		buildColorStops3Function('sampleBiomeMountainColor', BIOME_COLOR_STOPS.mountain),
+		buildColorStops3Function('sampleBiomeDesertColor', BIOME_COLOR_STOPS.desert),
+		buildColorStops4Function('sampleThemeHillsColor', THEME_PALETTES.hills),
+		buildColorStops4Function('sampleThemeMountainsColor', THEME_PALETTES.mountains),
+		buildColorStops4Function('sampleThemeDesertColor', THEME_PALETTES.desert),
+		buildColorStops4Function('sampleThemeDefaultColor', THEME_PALETTES.default),
+		`vec3 sampleThemePalette(float normalizedHeight, int terrainTypeId) {
+	if (terrainTypeId == 1) {
+		return sampleThemeHillsColor(normalizedHeight);
+	}
 
-	return color.copy(terrainColor).lerp(SAND_COLOR, sandWeight);
+	if (terrainTypeId == 2) {
+		return sampleThemeMountainsColor(normalizedHeight);
+	}
+
+	if (terrainTypeId == 3) {
+		return sampleThemeDesertColor(normalizedHeight);
+	}
+
+	return sampleThemeDefaultColor(normalizedHeight);
+}`,
+		`vec3 sampleBiomeTerrainColor(float normalizedHeight, float slope, int terrainTypeId) {
+	if (terrainTypeId == 3) {
+		return sampleBiomeDesertColor(normalizedHeight);
+	}
+
+	vec3 plainColor = sampleBiomePlainColor(normalizedHeight);
+	vec3 hillColor = sampleBiomeHillColor(normalizedHeight);
+	vec3 mountainColor = sampleBiomeMountainColor(normalizedHeight);
+
+	float lowHeightFade = smoothstep(-0.08, 0.12, normalizedHeight);
+	float hillFromHeight = smoothstep(0.12, 0.46, normalizedHeight);
+	float hillFromSlope = smoothstep(0.2, 0.44, slope);
+	float hillBlend = max(hillFromHeight, hillFromSlope) * lowHeightFade;
+
+	float mountainFromHeight = smoothstep(0.5, 0.82, normalizedHeight);
+	float mountainFromSlope = smoothstep(0.48, 0.78, slope);
+	float mountainBlend = max(mountainFromHeight, mountainFromSlope) * lowHeightFade;
+
+	if (terrainTypeId == 1) {
+		hillBlend = max(hillBlend, 0.5);
+	}
+
+	if (terrainTypeId == 2) {
+		mountainBlend = max(mountainBlend, 0.65);
+	}
+
+	hillBlend = clamp(hillBlend, 0.0, 1.0);
+	mountainBlend = clamp(max(mountainBlend, hillBlend * 0.15), 0.0, 1.0);
+	float effectiveHillBlend = hillBlend * (1.0 - mountainBlend * 0.9);
+	float mountainDominance = smoothstep(0.18, 0.78, mountainBlend);
+
+	return mix(mix(plainColor, hillColor, effectiveHillBlend), mountainColor, mountainDominance);
+}`,
+		`float sampleTerrainSandWeight(float worldHeight, float normalizedHeight, float slope) {
+	if (worldHeight <= 0.5) {
+		return 1.0;
+	}
+
+	float shorelineWeight = 1.0 - smoothstep(0.5, 4.0, worldHeight);
+	float slopeAttenuation = 1.0 - smoothstep(0.45, 0.9, slope);
+	return clamp(shorelineWeight * (0.7 + slopeAttenuation * 0.3), 0.0, 1.0);
+}`,
+		`vec3 sampleTerrainColor(float worldHeight, float normalizedHeight, float slope, int colorMode, int terrainTypeId) {
+	vec3 terrainColor = colorMode == 1
+		? sampleThemePalette(normalizedHeight, terrainTypeId)
+		: sampleBiomeTerrainColor(normalizedHeight, slope, terrainTypeId);
+
+	float sandWeight = sampleTerrainSandWeight(worldHeight, normalizedHeight, slope);
+	return mix(terrainColor, ${colorToVec3Literal(SAND_COLOR)}, sandWeight);
+}`,
+	].join('\n\n');
+}
+
+const TERRAIN_SHADER_SOURCE = buildTerrainShaderSource();
+
+export function setupTerrainColorMaterial(material, terrain) {
+	if (material.userData.terrainColorInstalled) {
+		return;
+	}
+
+	material.onBeforeCompile = function (shader) {
+		shader.uniforms.terrainBaseHeight = { value: terrain.baseHeight };
+		shader.uniforms.terrainHeightMultiplier = { value: terrain.heightMultiplier };
+		shader.uniforms.terrainColorMode = { value: getTerrainColorModeValue(terrain.colorMode) };
+		shader.uniforms.terrainTypeId = { value: getTerrainTypeId(terrain.terrainType) };
+
+		shader.vertexShader = shader.vertexShader
+			.replace(
+				'#include <common>',
+				'#include <common>\nvarying vec3 vTerrainWorldPosition;\nvarying vec3 vTerrainWorldNormal;'
+			)
+			.replace(
+				'#include <begin_vertex>',
+				'#include <begin_vertex>'
+			)
+			.replace(
+				'#include <worldpos_vertex>',
+				'#include <worldpos_vertex>\nvTerrainWorldPosition = worldPosition.xyz;'
+			)
+			.replace(
+				'#include <beginnormal_vertex>',
+				'#include <beginnormal_vertex>\nvTerrainWorldNormal = normalize(mat3(modelMatrix) * objectNormal);'
+			);
+
+		shader.fragmentShader = shader.fragmentShader
+			.replace(
+				'#include <common>',
+				`#include <common>\nuniform float terrainBaseHeight;\nuniform float terrainHeightMultiplier;\nuniform int terrainColorMode;\nuniform int terrainTypeId;\nvarying vec3 vTerrainWorldPosition;\nvarying vec3 vTerrainWorldNormal;\n${TERRAIN_SHADER_SOURCE}`
+			)
+			.replace(
+				'#include <color_fragment>',
+				`float terrainNormalizedHeight = (vTerrainWorldPosition.y - terrainBaseHeight) / max(terrainHeightMultiplier, 0.0001);\nfloat terrainSlopeValue = terrainSlope(vTerrainWorldNormal);\ndiffuseColor.rgb = sampleTerrainColor(vTerrainWorldPosition.y, terrainNormalizedHeight, terrainSlopeValue, terrainColorMode, terrainTypeId);`
+			);
+
+		material.userData.terrainColorShader = shader;
+		applyPendingTerrainColorUniforms(shader.uniforms, material.userData.pendingTerrainColorUniforms);
+	};
+
+	material.customProgramCacheKey = function () {
+		return 'terrainColor';
+	};
+
+	material.needsUpdate = true;
+	material.userData.terrainColorInstalled = true;
+	material.userData.pendingTerrainColorUniforms = null;
+}
+
+export function applyTerrainColor(material, terrain) {
+	const shader = material.userData.terrainColorShader;
+	const pendingUniforms = {
+		terrainBaseHeight: terrain.baseHeight,
+		terrainHeightMultiplier: terrain.heightMultiplier,
+		terrainColorMode: getTerrainColorModeValue(terrain.colorMode),
+		terrainTypeId: getTerrainTypeId(terrain.terrainType),
+	};
+
+	if (!shader) {
+		material.userData.pendingTerrainColorUniforms = pendingUniforms;
+		return;
+	}
+
+	shader.uniforms.terrainBaseHeight.value = pendingUniforms.terrainBaseHeight;
+	shader.uniforms.terrainHeightMultiplier.value = pendingUniforms.terrainHeightMultiplier;
+	shader.uniforms.terrainColorMode.value = pendingUniforms.terrainColorMode;
+	shader.uniforms.terrainTypeId.value = pendingUniforms.terrainTypeId;
+	material.userData.pendingTerrainColorUniforms = null;
+}
+
+function applyPendingTerrainColorUniforms(uniforms, pending) {
+	if (!pending) {
+		return;
+	}
+
+	uniforms.terrainBaseHeight.value = pending.terrainBaseHeight;
+	uniforms.terrainHeightMultiplier.value = pending.terrainHeightMultiplier;
+	uniforms.terrainColorMode.value = pending.terrainColorMode;
+	uniforms.terrainTypeId.value = pending.terrainTypeId;
 }

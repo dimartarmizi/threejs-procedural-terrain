@@ -19,7 +19,14 @@ export function setupFogMaterial(material) {
 		return;
 	}
 
+	const previousOnBeforeCompile = material.onBeforeCompile;
+	const previousProgramCacheKey = material.customProgramCacheKey;
+
 	material.onBeforeCompile = function (shader) {
+		if (typeof previousOnBeforeCompile === 'function') {
+			previousOnBeforeCompile.call(this, shader);
+		}
+
 		shader.uniforms.fogCameraPosition = { value: new THREE.Vector3() };
 		shader.uniforms.fogSunDirection = { value: DEFAULT_SUN_DIRECTION.clone() };
 		shader.uniforms.fogTopColor = { value: DEFAULT_TOP_COLOR.clone() };
@@ -102,7 +109,11 @@ export function setupFogMaterial(material) {
 	};
 
 	material.customProgramCacheKey = function () {
-		return 'fog';
+		const previousKey = typeof previousProgramCacheKey === 'function'
+			? previousProgramCacheKey.call(this)
+			: previousProgramCacheKey;
+
+		return [previousKey, 'fog'].filter(Boolean).join('|');
 	};
 
 	material.needsUpdate = true;

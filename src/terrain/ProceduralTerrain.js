@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { getTerrainOptions } from './config.js';
 import { createSimplexNoise2D } from './noise.js';
-import { getTerrainColorByHeight } from './color.js';
+import { applyTerrainColor, setupTerrainColorMaterial } from './color.js';
 
 function clamp(value, min, max) {
 	return Math.max(min, Math.min(max, value));
@@ -55,9 +55,10 @@ export class ProceduralTerrain {
 			color: 0xffffff,
 			roughness: 1,
 			metalness: 0,
-			vertexColors: true,
 			wireframe: wireframe,
 		});
+		setupTerrainColorMaterial(material, this);
+		applyTerrainColor(material, this);
 
 		const mesh = new THREE.Mesh(geometry, material);
 		mesh.position.x = tileX * this.tileSize;
@@ -68,52 +69,24 @@ export class ProceduralTerrain {
 	}
 
 	updateTileMesh(tile) {
+		applyTerrainColor(tile.material, this);
 		this.updateTileGeometry(tile.geometry, tile.position.x, tile.position.z);
 	}
 
 	updateTileGeometry(geometry, worldOffsetX, worldOffsetZ) {
 		const position = geometry.attributes.position;
-		let colorAttribute = geometry.attributes.color;
-		if (!colorAttribute) {
-			colorAttribute = new THREE.Float32BufferAttribute(new Float32Array(position.count * 3), 3);
-			geometry.setAttribute('color', colorAttribute);
-		}
-		const color = new THREE.Color();
 
 		for (let index = 0; index < position.count; index += 1) {
 			const worldX = worldOffsetX + position.getX(index);
 			const worldZ = worldOffsetZ + position.getZ(index);
 			const height = this.sampleHeight(worldX, worldZ);
 			position.setY(index, height);
-
-			const normalizedHeight = (height - this.baseHeight) / this.heightMultiplier;
-			const slope = this.sampleSlope(worldX, worldZ);
-			getTerrainColorByHeight(height, normalizedHeight, slope, this.colorMode, this.terrainType, color);
-			const colorOffset = index * 3;
-
-			colorAttribute.array[colorOffset] = color.r;
-			colorAttribute.array[colorOffset + 1] = color.g;
-			colorAttribute.array[colorOffset + 2] = color.b;
 		}
 
 		position.needsUpdate = true;
-		colorAttribute.needsUpdate = true;
 		geometry.computeVertexNormals();
 		geometry.attributes.normal.needsUpdate = true;
 		geometry.computeBoundingBox();
 		geometry.computeBoundingSphere();
-	}
-
-	sampleSlope(worldX, worldZ) {
-		const sampleDistance = this.tileSize / this.tileResolution;
-		const heightLeft = this.sampleHeight(worldX - sampleDistance, worldZ);
-		const heightRight = this.sampleHeight(worldX + sampleDistance, worldZ);
-		const heightDown = this.sampleHeight(worldX, worldZ - sampleDistance);
-		const heightUp = this.sampleHeight(worldX, worldZ + sampleDistance);
-		const slopeX = (heightRight - heightLeft) / (sampleDistance * 2);
-		const slopeZ = (heightUp - heightDown) / (sampleDistance * 2);
-		const steepness = Math.sqrt(slopeX * slopeX + slopeZ * slopeZ);
-
-		return Math.atan(steepness) / (Math.PI / 2);
 	}
 }
