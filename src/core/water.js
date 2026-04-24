@@ -6,6 +6,11 @@ const WATER_COLOR_SHALLOW = new THREE.Color(0x5eb7dd);
 const DEFAULT_SUN_COLOR = new THREE.Color(0xffffff);
 const DEFAULT_AMBIENT_COLOR = new THREE.Color(0x7c8b9b);
 const DEFAULT_SUN_DIRECTION = new THREE.Vector3(0.4, 0.8, 0.2).normalize();
+const DEFAULT_WATER_COLOR_DEEP = WATER_COLOR_DEEP.clone();
+const DEFAULT_WATER_COLOR_SHALLOW = WATER_COLOR_SHALLOW.clone();
+const WATER_COLOR_WORKING = new THREE.Color();
+const WATER_COLOR_WORKING_2 = new THREE.Color();
+const WATER_ANIMATION_SPEED = 0.55;
 
 export function createWaterSurface(tileSize) {
 	const loader = new THREE.TextureLoader();
@@ -158,9 +163,10 @@ export function updateWaterSurface(waterSurface, cameraPosition, timeSeconds, en
 	}
 
 	const uniforms = waterSurface.material.uniforms;
-	uniforms.uTime.value = timeSeconds;
+	uniforms.uTime.value = timeSeconds * WATER_ANIMATION_SPEED;
 	uniforms.uCameraPosition.value.copy(cameraPosition);
 	uniforms.uEnabled.value = enabled ? 1 : 0;
+	updateWaterColorUniforms(uniforms, atmosphereState);
 
 	if (atmosphereState?.sunDirection) {
 		uniforms.uSunDirection.value.copy(atmosphereState.sunDirection);
@@ -200,4 +206,29 @@ export function updateWaterSurface(waterSurface, cameraPosition, timeSeconds, en
 	if (Number.isFinite(fogState?.fogDensity)) {
 		uniforms.uFogDensity.value = fogState.fogDensity;
 	}
+}
+
+function updateWaterColorUniforms(uniforms, atmosphereState) {
+	if (!atmosphereState?.topColor) {
+		uniforms.uColorDeep.value.copy(DEFAULT_WATER_COLOR_DEEP);
+		uniforms.uColorShallow.value.copy(DEFAULT_WATER_COLOR_SHALLOW);
+		return;
+	}
+
+	const horizonColor = atmosphereState.horizonColor || atmosphereState.upperColor || atmosphereState.topColor;
+	const upperColor = atmosphereState.upperColor || atmosphereState.topColor;
+	const bottomColor = atmosphereState.bottomColor || horizonColor;
+
+	WATER_COLOR_WORKING.copy(DEFAULT_WATER_COLOR_DEEP)
+		.lerp(bottomColor, 0.2)
+		.lerp(horizonColor, 0.22)
+		.lerp(atmosphereState.topColor, 0.06);
+
+	WATER_COLOR_WORKING_2.copy(DEFAULT_WATER_COLOR_SHALLOW)
+		.lerp(horizonColor, 0.3)
+		.lerp(upperColor, 0.22)
+		.lerp(atmosphereState.topColor, 0.08);
+
+	uniforms.uColorDeep.value.copy(WATER_COLOR_WORKING);
+	uniforms.uColorShallow.value.copy(WATER_COLOR_WORKING_2);
 }
