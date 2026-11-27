@@ -11,6 +11,7 @@ const DEFAULT_WATER_COLOR_SHALLOW = WATER_COLOR_SHALLOW.clone();
 const WATER_COLOR_WORKING = new THREE.Color();
 const WATER_COLOR_WORKING_2 = new THREE.Color();
 const WATER_ANIMATION_SPEED = 0.55;
+const HEIGHTMAP_SIZE = 64;
 
 export function createWaterSurface(tileSize) {
 	const loader = new THREE.TextureLoader();
@@ -19,11 +20,23 @@ export function createWaterSurface(tileSize) {
 	normalTexture.wrapT = THREE.RepeatWrapping;
 	normalTexture.colorSpace = THREE.NoColorSpace;
 
+	const heightData = new Uint8Array(HEIGHTMAP_SIZE * HEIGHTMAP_SIZE * 4);
+	const heightMap = new THREE.DataTexture(heightData, HEIGHTMAP_SIZE, HEIGHTMAP_SIZE, THREE.RGBAFormat);
+	heightMap.minFilter = THREE.LinearFilter;
+	heightMap.magFilter = THREE.LinearFilter;
+	heightMap.wrapS = THREE.ClampToEdgeWrapping;
+	heightMap.wrapT = THREE.ClampToEdgeWrapping;
+	heightMap.needsUpdate = true;
+
 	const material = new THREE.ShaderMaterial({
 		uniforms: {
 			uTime: { value: 0 },
 			uCameraPosition: { value: new THREE.Vector3() },
 			uNormalMap: { value: normalTexture },
+			uTerrainHeightMap: { value: heightMap },
+			uHeightMapCenter: { value: new THREE.Vector2() },
+			uHeightMapSpan: { value: tileSize },
+			uHeightMapMax: { value: 200 },
 			uColorDeep: { value: WATER_COLOR_DEEP.clone() },
 			uColorShallow: { value: WATER_COLOR_SHALLOW.clone() },
 			uSunDirection: { value: DEFAULT_SUN_DIRECTION.clone() },
@@ -40,16 +53,13 @@ export function createWaterSurface(tileSize) {
 			uFogHeightMin: { value: -40 },
 			uFogHeightMax: { value: 240 },
 			uFogDensity: { value: 0 },
-			uEnabled: { value: 1 },
 		},
 		vertexShader: `
 			#include <common>
 			#include <logdepthbuf_pars_vertex>
-			varying vec2 vUv;
 			varying vec3 vWorldPosition;
 
 			void main() {
-				vUv = uv;
 				vec4 worldPosition = modelMatrix * vec4(position, 1.0);
 				vWorldPosition = worldPosition.xyz;
 				gl_Position = projectionMatrix * viewMatrix * worldPosition;
@@ -62,6 +72,10 @@ export function createWaterSurface(tileSize) {
 			uniform float uTime;
 			uniform vec3 uCameraPosition;
 			uniform sampler2D uNormalMap;
+			uniform sampler2D uTerrainHeightMap;
+			uniform vec2 uHeightMapCenter;
+			uniform float uHeightMapSpan;
+			uniform float uHeightMapMax;
 			uniform vec3 uColorDeep;
 			uniform vec3 uColorShallow;
 			uniform vec3 uSunDirection;
@@ -78,9 +92,7 @@ export function createWaterSurface(tileSize) {
 			uniform float uFogHeightMin;
 			uniform float uFogHeightMax;
 			uniform float uFogDensity;
-			uniform float uEnabled;
 
-			varying vec2 vUv;
 			varying vec3 vWorldPosition;
 
 			vec3 sampleSkyGradientColor(float t) {
@@ -93,11 +105,36 @@ export function createWaterSurface(tileSize) {
 				return color;
 			}
 
-			void main() {
-				if (uEnabled < 0.5) {
-					discard;
+			float sampleTerrainSunVisibility(vec3 worldPos, vec3 sunDir) {
+				if (sunDir.y <= 0.005) {
+					return 0.0;
 				}
 
+				float maxDist = min(uHeightMapSpan * 0.46, (uHeightMapMax / max(sunDir.y, 0.03)) * 1.1);
+				float softness = max(6.0, uHeightMapMax * 0.08);
+				float shadow = 0.0;
+
+				for (int i = 1; i <= 12; i++) {
+					float f = float(i) / 12.0;
+					float t = mix(f, f * f, 0.45) * maxDist;
+					vec2 sampleXZ = worldPos.xz + sunDir.xz * t;
+					vec2 hmUv = (sampleXZ - uHeightMapCenter) / uHeightMapSpan + 0.5;
+					if (hmUv.x <= 0.01 || hmUv.x >= 0.99 || hmUv.y <= 0.01 || hmUv.y >= 0.99) {
+						break;
+					}
+					float terrainH = texture2D(uTerrainHeightMap, hmUv).r * uHeightMapMax;
+					float rayY = worldPos.y + sunDir.y * t;
+					float occ = smoothstep(-softness, softness, terrainH - rayY);
+					shadow = max(shadow, occ);
+					if (shadow >= 0.99) {
+						return 0.0;
+					}
+				}
+
+				return (1.0 - shadow) * smoothstep(0.005, 0.05, sunDir.y);
+			}
+
+			void main() {
 				vec2 worldUv = vWorldPosition.xz * 0.012;
 				vec2 uvA = worldUv * 3.0 + vec2(uTime * 0.11, uTime * 0.07);
 				vec2 uvB = worldUv * 4.8 + vec2(-uTime * 0.09, uTime * 0.13);
@@ -107,13 +144,14 @@ export function createWaterSurface(tileSize) {
 
 				vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
 				vec3 sunDir = normalize(uSunDirection);
+				float sunVisibility = sampleTerrainSunVisibility(vWorldPosition, sunDir);
 				float nDotL = max(dot(normal, sunDir), 0.0);
 				float specular = pow(max(dot(normal, normalize(sunDir + viewDir)), 0.0), 80.0);
 				float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 2.4);
 				vec3 baseColor = mix(uColorDeep, uColorShallow, fresnel * 0.95 + nDotL * 0.05);
 				vec3 ambient = uAmbientColor * uAmbientIntensity * 0.48;
 				vec3 diffuse = uSunColor * (uSunIntensity * (0.18 + nDotL * 0.62));
-				vec3 highlight = uSunColor * specular * (0.4 + fresnel * 0.55) * uSunIntensity;
+				vec3 highlight = uSunColor * specular * (0.4 + fresnel * 0.55) * uSunIntensity * sunVisibility;
 				vec3 finalColor = baseColor * (ambient + diffuse) + highlight + fresnel * 0.08;
 
 				vec3 fogViewDirection = normalize(vWorldPosition - uCameraPosition);
@@ -139,19 +177,68 @@ export function createWaterSurface(tileSize) {
 		toneMapped: true,
 	});
 
-	const geometry = new THREE.PlaneGeometry(tileSize, tileSize, 1, 1);
+	const geometry = new THREE.PlaneGeometry(tileSize, tileSize, 16, 16);
 	geometry.rotateX(-Math.PI / 2);
 
 	return {
 		tileSize,
 		geometry,
 		material,
+		heightData,
+		heightMap,
+		heightMapCenterX: NaN,
+		heightMapCenterZ: NaN,
+		heightMapSpan: 0,
 		dispose() {
 			geometry.dispose();
 			material.uniforms.uNormalMap.value.dispose();
+			heightMap.dispose();
 			material.dispose();
 		},
 	};
+}
+
+export function updateWaterHeightMap(waterSurface, terrain, cameraPosition, span, force = false) {
+	const step = span / HEIGHTMAP_SIZE;
+	const moveThreshold = terrain.tileSize * 1.5;
+
+	if (
+		!force &&
+		waterSurface.heightMapSpan === span &&
+		Math.abs(cameraPosition.x - waterSurface.heightMapCenterX) < moveThreshold &&
+		Math.abs(cameraPosition.z - waterSurface.heightMapCenterZ) < moveThreshold
+	) {
+		return;
+	}
+
+	const snappedX = Math.round(cameraPosition.x / step) * step;
+	const snappedZ = Math.round(cameraPosition.z / step) * step;
+
+	const maxH = Math.max(10, terrain.baseHeight + terrain.heightMultiplier);
+	const invMaxH = 255 / maxH;
+	const data = waterSurface.heightData;
+	const minX = snappedX - span * 0.5;
+	const minZ = snappedZ - span * 0.5;
+
+	for (let iz = 0; iz < HEIGHTMAP_SIZE; iz++) {
+		const wz = minZ + (iz + 0.5) * step;
+		for (let ix = 0; ix < HEIGHTMAP_SIZE; ix++) {
+			const wx = minX + (ix + 0.5) * step;
+			const h = terrain.sampleHeight(wx, wz);
+			const idx = (iz * HEIGHTMAP_SIZE + ix) * 4;
+			data[idx] = h <= 0 ? 0 : Math.min(255, Math.round(h * invMaxH));
+		}
+	}
+
+	waterSurface.heightMapCenterX = snappedX;
+	waterSurface.heightMapCenterZ = snappedZ;
+	waterSurface.heightMapSpan = span;
+	waterSurface.heightMap.needsUpdate = true;
+
+	const uniforms = waterSurface.material.uniforms;
+	uniforms.uHeightMapCenter.value.set(snappedX, snappedZ);
+	uniforms.uHeightMapSpan.value = span;
+	uniforms.uHeightMapMax.value = maxH;
 }
 
 export function createWaterTileMesh(tileX, tileZ, tileSize, waterSurface) {
@@ -163,15 +250,10 @@ export function createWaterTileMesh(tileX, tileZ, tileSize, waterSurface) {
 	return mesh;
 }
 
-export function updateWaterSurface(waterSurface, cameraPosition, timeSeconds, enabled, atmosphereState, lightingState, fogState) {
-	if (!waterSurface) {
-		return;
-	}
-
+export function updateWaterSurface(waterSurface, cameraPosition, timeSeconds, atmosphereState, lightingState, fogState) {
 	const uniforms = waterSurface.material.uniforms;
 	uniforms.uTime.value = timeSeconds * WATER_ANIMATION_SPEED;
 	uniforms.uCameraPosition.value.copy(cameraPosition);
-	uniforms.uEnabled.value = enabled ? 1 : 0;
 	updateWaterColorUniforms(uniforms, atmosphereState);
 
 	if (atmosphereState?.sunDirection) {

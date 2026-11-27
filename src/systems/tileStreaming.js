@@ -1,5 +1,5 @@
 import { applyFog } from '../core/fog.js';
-import { createWaterSurface, createWaterTileMesh, updateWaterSurface } from '../core/water.js';
+import { createWaterSurface, createWaterTileMesh, updateWaterHeightMap, updateWaterSurface } from '../core/water.js';
 import { createPropsResources, createTileProps } from '../core/props.js';
 
 export function createTileStreamingController(terrain, scene, settings) {
@@ -27,6 +27,7 @@ export function createTileStreamingController(terrain, scene, settings) {
 	}
 
 	function update(cameraPosition) {
+		const terrainRefreshed = state.needsTerrainRefresh;
 		if (state.needsTerrainRefresh) {
 			refreshTiles(tiles, terrain);
 			clearAllProps(scene, tileProps);
@@ -88,7 +89,7 @@ export function createTileStreamingController(terrain, scene, settings) {
 			state.atmosphereState,
 			[propsResources.material, propsResources.roadMaterial, propsResources.bridgeMaterial]
 		);
-		syncWaterSurface(scene, terrain, settings, cameraPosition, getTimeSeconds(), fogState, state);
+		syncWaterSurface(scene, terrain, settings, cameraPosition, getTimeSeconds(), fogState, state, terrainRefreshed);
 	}
 
 	function setAtmosphere(nextAtmosphereState) {
@@ -266,7 +267,7 @@ function disposeTile(scene, tile) {
 	tile.geometry.dispose();
 }
 
-function syncWaterSurface(scene, terrain, settings, cameraPosition, timeSeconds, fogState, state) {
+function syncWaterSurface(scene, terrain, settings, cameraPosition, timeSeconds, fogState, state, forceHeightMap = false) {
 	if (!settings.waterEnabled) {
 		if (state.waterMesh) {
 			state.waterMesh.visible = false;
@@ -288,16 +289,21 @@ function syncWaterSurface(scene, terrain, settings, cameraPosition, timeSeconds,
 		state.waterMesh = createWaterTileMesh(0, 0, requiredSpan, state.waterSurface);
 		state.waterMesh.frustumCulled = false;
 		scene.add(state.waterMesh);
+		forceHeightMap = true;
 	}
 
 	state.waterMesh.visible = true;
-	state.waterMesh.position.set(cameraPosition.x, 0, cameraPosition.z);
+	const waterSnapX = Math.round(cameraPosition.x / terrain.tileSize) * terrain.tileSize;
+	const waterSnapZ = Math.round(cameraPosition.z / terrain.tileSize) * terrain.tileSize;
+	state.waterMesh.position.set(waterSnapX, 0, waterSnapZ);
+
+	const heightMapSpan = terrain.tileSize * (settings.renderDistance * 2 + 2);
+	updateWaterHeightMap(state.waterSurface, terrain, cameraPosition, heightMapSpan, forceHeightMap);
 
 	updateWaterSurface(
 		state.waterSurface,
 		cameraPosition,
 		timeSeconds,
-		true,
 		state.atmosphereState,
 		state.lightingState,
 		fogState
