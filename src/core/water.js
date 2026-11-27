@@ -43,6 +43,8 @@ export function createWaterSurface(tileSize) {
 			uEnabled: { value: 1 },
 		},
 		vertexShader: `
+			#include <common>
+			#include <logdepthbuf_pars_vertex>
 			varying vec2 vUv;
 			varying vec3 vWorldPosition;
 
@@ -51,9 +53,12 @@ export function createWaterSurface(tileSize) {
 				vec4 worldPosition = modelMatrix * vec4(position, 1.0);
 				vWorldPosition = worldPosition.xyz;
 				gl_Position = projectionMatrix * viewMatrix * worldPosition;
+				#include <logdepthbuf_vertex>
 			}
 		`,
 		fragmentShader: `
+			#include <common>
+			#include <logdepthbuf_pars_fragment>
 			uniform float uTime;
 			uniform vec3 uCameraPosition;
 			uniform sampler2D uNormalMap;
@@ -124,6 +129,7 @@ export function createWaterSurface(tileSize) {
 				fogFactor = clamp(fogFactor, 0.0, 0.992);
 				finalColor = mix(finalColor, fogGradient, fogFactor);
 
+				#include <logdepthbuf_fragment>
 				gl_FragColor = vec4(finalColor, 0.85);
 			}
 		`,
