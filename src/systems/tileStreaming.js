@@ -72,7 +72,20 @@ export function createTileStreamingController(terrain, scene, settings) {
 				const key = createTileKey(item.tile.userData.tileX, item.tile.userData.tileZ);
 				if (tileProps.has(key)) {
 					disposePropsGroup(scene, tileProps.get(key));
-					tileProps.delete(key);
+					if (neededProps.has(key)) {
+						const nextGroup = createTileProps(
+							item.tile.userData.tileX,
+							item.tile.userData.tileZ,
+							terrain,
+							propsResources,
+							item.targetResolution,
+							settings
+						);
+						if (nextGroup) scene.add(nextGroup);
+						tileProps.set(key, nextGroup);
+					} else {
+						tileProps.delete(key);
+					}
 				}
 			}
 		}
@@ -237,12 +250,9 @@ function createQueuedTiles(missingTiles, tileCreationBudget, terrain, scene, wir
 }
 
 function removeUnusedTiles(scene, tiles, neededTiles) {
-	const keys = Array.from(tiles.keys());
-
-	for (let index = 0; index < keys.length; index += 1) {
-		const key = keys[index];
+	for (const [key, tile] of tiles) {
 		if (!neededTiles.has(key)) {
-			disposeTile(scene, tiles.get(key));
+			disposeTile(scene, tile);
 			tiles.delete(key);
 		}
 	}

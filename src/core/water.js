@@ -144,9 +144,9 @@ export function createWaterSurface(tileSize) {
 
 				vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
 				vec3 sunDir = normalize(uSunDirection);
-				float sunVisibility = sampleTerrainSunVisibility(vWorldPosition, sunDir);
 				float nDotL = max(dot(normal, sunDir), 0.0);
 				float specular = pow(max(dot(normal, normalize(sunDir + viewDir)), 0.0), 80.0);
+				float sunVisibility = specular > 0.004 ? sampleTerrainSunVisibility(vWorldPosition, sunDir) : 0.0;
 				float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 2.4);
 				vec3 baseColor = mix(uColorDeep, uColorShallow, fresnel * 0.95 + nDotL * 0.05);
 				vec3 ambient = uAmbientColor * uAmbientIntensity * 0.48;

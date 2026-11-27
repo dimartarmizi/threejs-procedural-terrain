@@ -205,17 +205,6 @@ float terrainVNoise(vec2 p) {
 	);
 }
 
-float terrainDetailFbm(vec2 p) {
-	float v = 0.0;
-	float a = 0.5;
-	for (int i = 0; i < 3; i++) {
-		v += a * terrainVNoise(p);
-		p *= 2.13;
-		a *= 0.5;
-	}
-	return v;
-}
-
 vec3 sampleFarmlandColor(vec2 worldXZ, float scaleNorm) {
 	float angle = 0.24;
 	mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
@@ -251,16 +240,15 @@ vec3 sampleFarmlandColor(vec2 worldXZ, float scaleNorm) {
 	return mix(cBund, col, insidePlot);
 }
 
-vec3 sampleTerrainColor(vec3 worldPos, float normalizedHeight, float slope, int colorMode, int terrainTypeId) {
+vec3 sampleTerrainColor(vec3 worldPos, vec3 worldNormal, float normalizedHeight, float slope, int colorMode, int terrainTypeId) {
 	float worldHeight = worldPos.y;
 	float scaleNorm = max(terrainScale / 5000.0, 0.14);
 	vec3 terrainColor = colorMode == 1
 		? sampleThemePalette(normalizedHeight, terrainTypeId)
 		: sampleBiomeTerrainColor(normalizedHeight, slope, terrainTypeId);
 
-	float macroDetail = terrainDetailFbm(worldPos.xz * (0.0018 / scaleNorm));
-	float microDetail = terrainVNoise(worldPos.xz * (0.022 / scaleNorm));
-	terrainColor *= mix(0.84, 1.16, macroDetail * 0.65 + microDetail * 0.35);
+	float macroDetail = terrainVNoise(worldPos.xz * (0.0022 / scaleNorm));
+	terrainColor *= mix(0.90, 1.10, macroDetail);
 
 	if (terrainTypeId != 3 && colorMode == 0) {
 		float flatMask = 1.0 - smoothstep(0.06, 0.16, slope);
@@ -268,17 +256,23 @@ vec3 sampleTerrainColor(vec3 worldPos, float normalizedHeight, float slope, int 
 		float minFarmLow = max(4.0, 8.0 * scaleNorm);
 		float minFarmHigh = max(10.0, 22.0 * scaleNorm);
 		float elevMask = smoothstep(minFarmLow, minFarmHigh, worldHeight) * (1.0 - smoothstep(maxFarmH * 0.68, maxFarmH, worldHeight));
-		float farmRegion = smoothstep(0.30, 0.60, terrainVNoise(worldPos.xz * (0.00028 / scaleNorm) + vec2(4.2, -7.8)));
-		float farmWeight = flatMask * elevMask * farmRegion;
+		float farmWeight = flatMask * elevMask;
 		if (farmWeight > 0.01) {
-			vec3 farmCol = sampleFarmlandColor(worldPos.xz, scaleNorm);
-			terrainColor = mix(terrainColor, farmCol, farmWeight * 0.88);
+			float farmRegion = smoothstep(0.30, 0.60, terrainVNoise(worldPos.xz * (0.00028 / scaleNorm) + vec2(4.2, -7.8)));
+			farmWeight *= farmRegion;
+			if (farmWeight > 0.01) {
+				vec3 farmCol = sampleFarmlandColor(worldPos.xz, scaleNorm);
+				terrainColor = mix(terrainColor, farmCol, farmWeight * 0.88);
+			}
 		}
 
-		float strata = sin(worldHeight * (0.08 / scaleNorm) + macroDetail * 5.0) * 0.5 + 0.5;
 		float cliffMask = smoothstep(0.34, 0.62, slope);
-		vec3 cliffCol = mix(vec3(0.18, 0.18, 0.17), vec3(0.34, 0.32, 0.29), strata * 0.6 + microDetail * 0.4);
-		terrainColor = mix(terrainColor, cliffCol, cliffMask * 0.72);
+		if (cliffMask > 0.01) {
+			vec2 rockUv = abs(worldNormal.x) > abs(worldNormal.z) ? worldPos.zy : worldPos.xy;
+			float rockDetail = terrainVNoise(rockUv * (0.022 / scaleNorm));
+			vec3 rockTint = sampleBiomeMountainColor(normalizedHeight) * mix(0.82, 1.12, rockDetail);
+			terrainColor = mix(terrainColor, rockTint, cliffMask * 0.65);
+		}
 	}
 
 	float sandWeight = sampleTerrainSandWeight(worldHeight, normalizedHeight, slope);
@@ -326,7 +320,7 @@ export function setupTerrainColorMaterial(material, terrain) {
 			)
 			.replace(
 				'#include <color_fragment>',
-				`float terrainNormalizedHeight = (vTerrainWorldPosition.y - terrainBaseHeight) / max(terrainHeightMultiplier, 0.0001);\nfloat terrainSlopeValue = terrainSlope(vTerrainWorldNormal);\ndiffuseColor.rgb = sampleTerrainColor(vTerrainWorldPosition, terrainNormalizedHeight, terrainSlopeValue, terrainColorMode, terrainTypeId);`
+				`float terrainNormalizedHeight = (vTerrainWorldPosition.y - terrainBaseHeight) / max(terrainHeightMultiplier, 0.0001);\nvec3 terrainNormalDir = normalize(vTerrainWorldNormal);\nfloat terrainSlopeValue = terrainSlope(terrainNormalDir);\ndiffuseColor.rgb = sampleTerrainColor(vTerrainWorldPosition, terrainNormalDir, terrainNormalizedHeight, terrainSlopeValue, terrainColorMode, terrainTypeId);`
 			);
 
 		material.userData.terrainColorShader = shader;

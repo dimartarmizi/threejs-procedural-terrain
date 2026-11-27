@@ -58,7 +58,7 @@ function distToSegmentSq(px, pz, ax, az, bx, bz) {
 	return { distSq: ex * ex + ez * ez, t, dx, dz };
 }
 
-export function sampleTerrainGridHeight(terrain, wx, wz, resolution, roads) {
+export function sampleTerrainGridHeight(terrain, wx, wz, resolution, segments, cache = null) {
 	const tileSize = terrain.tileSize;
 	const step = tileSize / resolution;
 	const shiftedX = wx + tileSize * 0.5;
@@ -72,10 +72,21 @@ export function sampleTerrainGridHeight(terrain, wx, wz, resolution, roads) {
 	const v = clamp((wz - z0) / step, 0, 1);
 
 	const rn = terrain.roadNetwork;
-	const h00 = rn.sampleGradedTerrainHeight(x0, z0, roads);
-	const h10 = rn.sampleGradedTerrainHeight(x0 + step, z0, roads);
-	const h01 = rn.sampleGradedTerrainHeight(x0, z0 + step, roads);
-	const h11 = rn.sampleGradedTerrainHeight(x0 + step, z0 + step, roads);
+	const sampleCorner = (gx, gz, px, pz) => {
+		if (!cache) return rn.sampleGradedHeight(px, pz, segments);
+		const key = `${gx}:${gz}`;
+		let h = cache.get(key);
+		if (h === undefined) {
+			h = rn.sampleGradedHeight(px, pz, segments);
+			cache.set(key, h);
+		}
+		return h;
+	};
+
+	const h00 = sampleCorner(ix, iz, x0, z0);
+	const h10 = sampleCorner(ix + 1, iz, x0 + step, z0);
+	const h01 = sampleCorner(ix, iz + 1, x0, z0 + step);
+	const h11 = sampleCorner(ix + 1, iz + 1, x0 + step, z0 + step);
 
 	if (u + v <= 1) {
 		return h00 + u * (h10 - h00) + v * (h01 - h00);
@@ -730,9 +741,9 @@ export class RoadNetwork {
 		return 0;
 	}
 
-	getRoadsInBounds(minX, maxX, minZ, maxZ) {
+	getRoadsInBounds(minX, maxX, minZ, maxZ, extraMargin = 0) {
 		if (this.terrain.terrainType === 'desert') return [];
-		const margin = this.gradeFlatRadius + this.gradeBlendWidth;
+		const margin = this.gradeFlatRadius + this.gradeBlendWidth + extraMargin;
 		const minCX = Math.floor((minX - this.cellSize) / this.cellSize);
 		const maxCX = Math.floor((maxX + this.cellSize) / this.cellSize);
 		const minCZ = Math.floor((minZ - this.cellSize) / this.cellSize);
@@ -773,7 +784,33 @@ export class RoadNetwork {
 		return roads;
 	}
 
-	sampleGradedTerrainHeight(wx, wz, roads) {
+	collectGradingSegments(roads, minX, maxX, minZ, maxZ) {
+		const outerR = this.gradeFlatRadius + this.gradeBlendWidth;
+		const segs = [];
+		for (let r = 0; r < roads.length; r++) {
+			const pts = roads[r].points;
+			for (let i = 0; i < pts.length - 1; i++) {
+				const a = pts[i];
+				const b = pts[i + 1];
+				const minSegX = a.x < b.x ? a.x : b.x;
+				const maxSegX = a.x > b.x ? a.x : b.x;
+				if (maxSegX < minX - outerR || minSegX > maxX + outerR) continue;
+				const minSegZ = a.z < b.z ? a.z : b.z;
+				const maxSegZ = a.z > b.z ? a.z : b.z;
+				if (maxSegZ < minZ - outerR || minSegZ > maxZ + outerR) continue;
+				segs.push({
+					ax: a.x, az: a.z, ay: a.roadY,
+					bx: b.x, bz: b.z, by: b.roadY,
+					minX: minSegX - outerR, maxX: maxSegX + outerR,
+					minZ: minSegZ - outerR, maxZ: maxSegZ + outerR,
+					isBridge: a.isBridge && b.isBridge,
+				});
+			}
+		}
+		return segs;
+	}
+
+	sampleGradedHeight(wx, wz, segments) {
 		const rawY = this.terrain.sampleHeight(wx, wz);
 		const flatR = this.gradeFlatRadius;
 		const outerR = flatR + this.gradeBlendWidth;
@@ -783,35 +820,14 @@ export class RoadNetwork {
 		let targetY = rawY;
 		let isBridgeClosest = false;
 
-		for (let r = 0; r < roads.length; r++) {
-			const road = roads[r];
-			if (
-				wx < road.bounds.minX - outerR ||
-				wx > road.bounds.maxX + outerR ||
-				wz < road.bounds.minZ - outerR ||
-				wz > road.bounds.maxZ + outerR
-			) {
-				continue;
-			}
-
-			const pts = road.points;
-			for (let i = 0; i < pts.length - 1; i++) {
-				const a = pts[i];
-				const b = pts[i + 1];
-
-				const minSegX = a.x < b.x ? a.x : b.x;
-				const maxSegX = a.x > b.x ? a.x : b.x;
-				if (wx < minSegX - outerR || wx > maxSegX + outerR) continue;
-				const minSegZ = a.z < b.z ? a.z : b.z;
-				const maxSegZ = a.z > b.z ? a.z : b.z;
-				if (wz < minSegZ - outerR || wz > maxSegZ + outerR) continue;
-
-				const hit = distToSegmentSq(wx, wz, a.x, a.z, b.x, b.z);
-				if (hit.distSq < bestDistSq) {
-					bestDistSq = hit.distSq;
-					targetY = lerp(a.roadY, b.roadY, hit.t);
-					isBridgeClosest = a.isBridge && b.isBridge;
-				}
+		for (let i = 0; i < segments.length; i++) {
+			const s = segments[i];
+			if (wx < s.minX || wx > s.maxX || wz < s.minZ || wz > s.maxZ) continue;
+			const hit = distToSegmentSq(wx, wz, s.ax, s.az, s.bx, s.bz);
+			if (hit.distSq < bestDistSq) {
+				bestDistSq = hit.distSq;
+				targetY = lerp(s.ay, s.by, hit.t);
+				isBridgeClosest = s.isBridge;
 			}
 		}
 
@@ -838,79 +854,39 @@ export class RoadNetwork {
 		const maxX = minX + tileSize;
 		const minZ = tileZ * tileSize - tileSize * 0.5;
 		const maxZ = minZ + tileSize;
-		const margin = this.roadWidth + this.shoulderWidth + this.sampleStep * 2;
 
-		const minCX = Math.floor((minX - this.cellSize) / this.cellSize);
-		const maxCX = Math.floor((maxX + this.cellSize) / this.cellSize);
-		const minCZ = Math.floor((minZ - this.cellSize) / this.cellSize);
-		const maxCZ = Math.floor((maxZ + this.cellSize) / this.cellSize);
+		const roads = this.getRoadsInBounds(minX, maxX, minZ, maxZ, this.sampleStep * 2);
 
-		const candidateSettlements = [];
-		const roads = [];
-		const seenEdges = new Set();
-
-		for (let cz = minCZ; cz <= maxCZ; cz++) {
-			for (let cx = minCX; cx <= maxCX; cx++) {
-				const s = this.getSettlement(cx, cz);
-				if (!s) continue;
-
-				if (s.x >= minX && s.x < maxX && s.z >= minZ && s.z < maxZ) {
-					candidateSettlements.push(s);
-				}
-
-				for (let dz = -2; dz <= 2; dz++) {
-					for (let dx = -2; dx <= 2; dx++) {
-						if (dx === 0 && dz === 0) continue;
-						if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
-						const nx = cx + dx;
-						const nz = cz + dz;
-						const edgeKey = this.getEdgeKey(cx, cz, nx, nz);
-						if (seenEdges.has(edgeKey)) continue;
-						seenEdges.add(edgeKey);
-
-						const road = this.getRoadEdge(cx, cz, nx, nz);
-						if (!road) continue;
-
-						if (
-							road.bounds.maxX < minX - margin ||
-							road.bounds.minX > maxX + margin ||
-							road.bounds.maxZ < minZ - margin ||
-							road.bounds.minZ > maxZ + margin
-						) {
-							continue;
-						}
-
-						roads.push(road);
-					}
-				}
-			}
-		}
-
+		const connectedIds = new Set();
 		const bridges = [];
 		for (let r = 0; r < roads.length; r++) {
 			const road = roads[r];
+			connectedIds.add(road.a.id);
+			connectedIds.add(road.b.id);
 			for (let b = 0; b < road.bridges.length; b++) {
 				const bridge = road.bridges[b];
-				const bTileX = Math.round(bridge.midX / tileSize);
-				const bTileZ = Math.round(bridge.midZ / tileSize);
-				if (bTileX === tileX && bTileZ === tileZ) {
+				if (Math.round(bridge.midX / tileSize) === tileX && Math.round(bridge.midZ / tileSize) === tileZ) {
 					bridges.push(bridge);
 				}
 			}
 		}
 
-		const connectedIds = new Set();
-		for (let r = 0; r < roads.length; r++) {
-			connectedIds.add(roads[r].a.id);
-			connectedIds.add(roads[r].b.id);
-		}
-		const settlements = candidateSettlements.filter((s) => connectedIds.has(s.id));
-
+		const minCX = Math.floor(minX / this.cellSize);
+		const maxCX = Math.floor(maxX / this.cellSize);
+		const minCZ = Math.floor(minZ / this.cellSize);
+		const maxCZ = Math.floor(maxZ / this.cellSize);
+		const settlements = [];
 		const junctions = [];
-		for (let s = 0; s < settlements.length; s++) {
-			const j = this.getSettlementJunction(settlements[s]);
-			if (j) {
-				junctions.push(j);
+
+		for (let cz = minCZ; cz <= maxCZ; cz++) {
+			for (let cx = minCX; cx <= maxCX; cx++) {
+				const s = this.getSettlement(cx, cz);
+				if (!s || !connectedIds.has(s.id)) continue;
+				if (s.x >= minX && s.x < maxX && s.z >= minZ && s.z < maxZ) {
+					settlements.push(s);
+					const j = this.getSettlementJunction(s);
+					if (j) junctions.push(j);
+				}
 			}
 		}
 

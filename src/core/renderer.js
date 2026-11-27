@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export function createRenderer(canvasHost) {
-	const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+	const renderer = new THREE.WebGLRenderer();
 	renderer.setSize(window.innerWidth, window.innerHeight);
 	renderer.autoClear = false;
 	renderer.shadowMap.enabled = false;

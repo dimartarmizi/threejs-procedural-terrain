@@ -134,10 +134,15 @@ function createCloudMaterial() {
 
 			void main() {
 				vec3 viewDir = normalize(vWorldPosition - uCameraPosition);
-				float cloudAltitude = uCameraWorldY + viewDir.y * uShellRadius;
-				float baseMask = smoothstep(uBaseHeight - 220.0, uBaseHeight + 220.0, cloudAltitude);
-				float topMask = 1.0 - smoothstep(uTopHeight - 240.0, uTopHeight + 240.0, cloudAltitude);
-				float heightMask = baseMask * topMask;
+				float midH = (uBaseHeight + uTopHeight) * 0.5;
+				float halfThick = max(80.0, (uTopHeight - uBaseHeight) * 0.5);
+				float deltaY = midH - uCameraWorldY;
+				float insideCloud = 1.0 - smoothstep(halfThick * 0.7, halfThick * 1.35, abs(deltaY));
+				float sideSign = deltaY >= 0.0 ? 1.0 : -1.0;
+				float heightMask = max(
+					smoothstep(0.015, 0.18, viewDir.y * sideSign),
+					insideCloud * smoothstep(-0.12, 0.14, viewDir.y)
+				);
 				if (heightMask <= 0.001) {
 					discard;
 				}

@@ -231,6 +231,9 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 	const minZ = tileZ * tileSize - tileSize * 0.5;
 	const maxZ = minZ + tileSize;
 	const pad = roadNetwork.sampleStep * 3.0;
+	const gradingSegments = roadNetwork.collectGradingSegments(roads, minX - pad, maxX + pad, minZ - pad, maxZ + pad);
+	const gridCache = new Map();
+	const sampleGridY = (x, z) => sampleTerrainGridHeight(terrain, x, z, resolution, gradingSegments, gridCache);
 
 	const halfRoad = roadNetwork.roadWidth * 0.5;
 	const halfTotal = halfRoad + roadNetwork.shoulderWidth;
@@ -266,11 +269,11 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 			const rxOuter = p.x + p.rx * halfTotal;
 			const rzOuter = p.z + p.rz * halfTotal;
 
-			const yC = sampleTerrainGridHeight(terrain, p.x, p.z, resolution, roads);
-			const yLE = sampleTerrainGridHeight(terrain, lxEdge, lzEdge, resolution, roads);
-			const yRE = sampleTerrainGridHeight(terrain, rxEdge, rzEdge, resolution, roads);
-			const yLO = sampleTerrainGridHeight(terrain, lxOuter, lzOuter, resolution, roads);
-			const yRO = sampleTerrainGridHeight(terrain, rxOuter, rzOuter, resolution, roads);
+			const yC = sampleGridY(p.x, p.z);
+			const yLE = sampleGridY(lxEdge, lzEdge);
+			const yRE = sampleGridY(rxEdge, rzEdge);
+			const yLO = sampleGridY(lxOuter, lzOuter);
+			const yRO = sampleGridY(rxOuter, rzOuter);
 
 			const minDeckY = p.isBridge
 				? p.roadY + surfaceLift
@@ -423,16 +426,16 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 				const bx = b.px - rx * halfRoad;
 				const bz = b.pz - rz * halfRoad;
 
-				const hMid = sampleTerrainGridHeight(terrain, b.px, b.pz, resolution, roads);
-				const hA = sampleTerrainGridHeight(terrain, ax, az, resolution, roads);
-				const hB = sampleTerrainGridHeight(terrain, bx, bz, resolution, roads);
+				const hMid = sampleGridY(b.px, b.pz);
+				const hA = sampleGridY(ax, az);
+				const hB = sampleGridY(bx, bz);
 				const deckY = Math.max(b.roadY, hMid, hA, hB) + surfaceLift;
 				sumDeckY += deckY;
 
 				branchEnds.push({ b, rx, rz, ax, az, bx, bz, deckY });
 			}
 
-			const centerTerrainY = sampleTerrainGridHeight(terrain, settlement.x, settlement.z, resolution, roads);
+			const centerTerrainY = sampleGridY(settlement.x, settlement.z);
 			const centerY = Math.max(sumDeckY / kCount, centerTerrainY + surfaceLift);
 			const perimeter = [];
 			const filletArcs = [];
@@ -476,7 +479,7 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 						? curr.deckY
 						: (s === filletSteps)
 							? next.deckY
-							: Math.max(interpY, sampleTerrainGridHeight(terrain, fx, fz, resolution, roads) + surfaceLift);
+							: Math.max(interpY, sampleGridY(fx, fz) + surfaceLift);
 					arc.push([fx, fy, fz]);
 					if (s < filletSteps) {
 						perimeter.push([fx, fy, fz]);
@@ -509,7 +512,7 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 					const ozDir = -tx / tLen;
 					const ox = pCurr[0] + oxDir * roadNetwork.shoulderWidth;
 					const oz = pCurr[2] + ozDir * roadNetwork.shoulderWidth;
-					const oy = Math.min(sampleTerrainGridHeight(terrain, ox, oz, resolution, roads), pCurr[1]) - skirtDrop;
+					const oy = Math.min(sampleGridY(ox, oz), pCurr[1]) - skirtDrop;
 
 					pushVert(pCurr[0], pCurr[1], pCurr[2], colShoulder);
 					pushVert(ox, oy, oz, colShoulder);
@@ -869,6 +872,7 @@ export function createTileProps(tileX, tileZ, terrain, resources, resolution, se
 		}
 		trees.instanceMatrix.needsUpdate = true;
 		trees.instanceColor.needsUpdate = true;
+		trees.computeBoundingSphere();
 		group.add(trees);
 	}
 
@@ -888,6 +892,7 @@ export function createTileProps(tileX, tileZ, terrain, resources, resolution, se
 		}
 		buildings.instanceMatrix.needsUpdate = true;
 		buildings.instanceColor.needsUpdate = true;
+		buildings.computeBoundingSphere();
 		group.add(buildings);
 	}
 

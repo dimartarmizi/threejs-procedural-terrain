@@ -5,7 +5,7 @@ export function createSimplexNoise2D(seed, { octaves, persistence, lacunarity })
 	const random = alea(String(seed));
 	const noise2D = createNoise2D(random);
 
-	return (x, y) => {
+	const fbm = (x, y) => {
 		let amplitude = 1;
 		let frequency = 1;
 		let sum = 0;
@@ -20,4 +20,7 @@ export function createSimplexNoise2D(seed, { octaves, persistence, lacunarity })
 
 		return Math.max(-1, Math.min(1, sum / normalization));
 	};
+
+	fbm.raw = noise2D;
+	return fbm;
 }

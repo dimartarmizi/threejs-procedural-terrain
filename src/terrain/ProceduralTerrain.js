@@ -43,6 +43,7 @@ export class ProceduralTerrain {
 			persistence: this.persistence,
 			lacunarity: this.lacunarity,
 		});
+		this.rawNoise = this.noise.raw;
 
 		this.roadNetwork = new RoadNetwork(this);
 
@@ -53,12 +54,12 @@ export class ProceduralTerrain {
 		const sampleX = worldX / this.scale;
 		const sampleZ = worldZ / this.scale;
 
-		const macroZone = this.noise(sampleX * 0.28 + 31.4, sampleZ * 0.28 - 19.2);
+		const macroZone = this.rawNoise(sampleX * 0.28 + 31.4, sampleZ * 0.28 - 19.2);
 		const valleyFlatness = clamp((0.18 - macroZone) / 0.55, 0, 1);
 		const valleyBlend = valleyFlatness * valleyFlatness * (3 - 2 * valleyFlatness);
 
 		const broadNoise = this.noise(sampleX, sampleZ);
-		const detailNoise = this.noise(sampleX * 1.9 + 17.3, sampleZ * 1.9 - 11.8);
+		const detailNoise = this.rawNoise(sampleX * 1.9 + 17.3, sampleZ * 1.9 - 11.8);
 		const ridgeNoise = 1 - Math.abs(broadNoise);
 		const rawShape = clamp(broadNoise * 0.7 + detailNoise * 0.3 + ridgeNoise * 0.2, -1, 1);
 
@@ -67,9 +68,9 @@ export class ProceduralTerrain {
 		let height = terrainShape * this.heightMultiplier + this.baseHeight;
 
 		if (this.terrainType !== 'desert') {
-			const warpX = this.noise(sampleX * 0.55 + 7.1, sampleZ * 0.55 - 3.3) * 0.32;
-			const warpZ = this.noise(sampleX * 0.55 - 5.8, sampleZ * 0.55 + 9.4) * 0.32;
-			const riverVal = Math.abs(this.noise(sampleX * 0.42 + warpX, sampleZ * 0.42 + warpZ));
+			const warpX = this.rawNoise(sampleX * 0.55 + 7.1, sampleZ * 0.55 - 3.3) * 0.32;
+			const warpZ = this.rawNoise(sampleX * 0.55 - 5.8, sampleZ * 0.55 + 9.4) * 0.32;
+			const riverVal = Math.abs(this.rawNoise(sampleX * 0.42 + warpX, sampleZ * 0.42 + warpZ));
 			const riverWidth = 0.036 + valleyBlend * 0.022;
 			if (riverVal < riverWidth * 2.4 && height > -18 && height < this.heightMultiplier * 0.65) {
 				const t = clamp(1 - riverVal / (riverWidth * 2.4), 0, 1);
@@ -90,7 +91,7 @@ export class ProceduralTerrain {
 	createTileGeometry(tileX, tileZ, resolution = this.tileResolution) {
 		const geometry = new THREE.PlaneGeometry(this.tileSize, this.tileSize, resolution, resolution);
 		geometry.rotateX(-Math.PI / 2);
-		this.updateTileGeometry(geometry, tileX * this.tileSize, tileZ * this.tileSize);
+		this.updateTileGeometry(geometry, tileX * this.tileSize, tileZ * this.tileSize, resolution);
 		return geometry;
 	}
 
@@ -113,24 +114,28 @@ export class ProceduralTerrain {
 			tile.userData.resolution = resolution;
 			return;
 		}
-		this.updateTileGeometry(tile.geometry, tile.position.x, tile.position.z);
+		this.updateTileGeometry(tile.geometry, tile.position.x, tile.position.z, resolution);
 	}
 
-	updateTileGeometry(geometry, worldOffsetX, worldOffsetZ) {
+	updateTileGeometry(geometry, worldOffsetX, worldOffsetZ, resolution = this.tileResolution) {
 		const position = geometry.attributes.position;
 		const half = this.tileSize * 0.5;
-		const tileRoads = this.roadNetwork.getRoadsInBounds(
-			worldOffsetX - half,
-			worldOffsetX + half,
-			worldOffsetZ - half,
-			worldOffsetZ + half
-		);
+		const minX = worldOffsetX - half;
+		const maxX = worldOffsetX + half;
+		const minZ = worldOffsetZ - half;
+		const maxZ = worldOffsetZ + half;
+		const tileRoads = resolution >= this.tileResolution
+			? this.roadNetwork.getRoadsInBounds(minX, maxX, minZ, maxZ)
+			: [];
+		const gradingSegments = tileRoads.length > 0
+			? this.roadNetwork.collectGradingSegments(tileRoads, minX, maxX, minZ, maxZ)
+			: [];
 
 		for (let index = 0; index < position.count; index += 1) {
 			const worldX = worldOffsetX + position.getX(index);
 			const worldZ = worldOffsetZ + position.getZ(index);
-			const height = tileRoads.length > 0
-				? this.roadNetwork.sampleGradedTerrainHeight(worldX, worldZ, tileRoads)
+			const height = gradingSegments.length > 0
+				? this.roadNetwork.sampleGradedHeight(worldX, worldZ, gradingSegments)
 				: this.sampleHeight(worldX, worldZ);
 			position.setY(index, height);
 		}
