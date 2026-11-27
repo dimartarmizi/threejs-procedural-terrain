@@ -146,13 +146,12 @@ function pushBox(positions, colors, indices, cx, cy, cz, sx, sy, sz, rotY, col) 
 		cz - x * sin + z * cos,
 	]);
 
-	// 6 faces (CCW outward)
-	pushQuad(positions, colors, indices, v[4], v[5], v[6], v[7], col, col, col, col); // +Z
-	pushQuad(positions, colors, indices, v[1], v[0], v[3], v[2], col, col, col, col); // -Z
-	pushQuad(positions, colors, indices, v[5], v[1], v[2], v[6], col, col, col, col); // +X
-	pushQuad(positions, colors, indices, v[0], v[4], v[7], v[3], col, col, col, col); // -X
-	pushQuad(positions, colors, indices, v[7], v[6], v[2], v[3], col, col, col, col); // +Y
-	pushQuad(positions, colors, indices, v[0], v[1], v[5], v[4], col, col, col, col); // -Y
+	pushQuad(positions, colors, indices, v[4], v[5], v[6], v[7], col, col, col, col);
+	pushQuad(positions, colors, indices, v[1], v[0], v[3], v[2], col, col, col, col);
+	pushQuad(positions, colors, indices, v[5], v[1], v[2], v[6], col, col, col, col);
+	pushQuad(positions, colors, indices, v[0], v[4], v[7], v[3], col, col, col, col);
+	pushQuad(positions, colors, indices, v[7], v[6], v[2], v[3], col, col, col, col);
+	pushQuad(positions, colors, indices, v[0], v[1], v[5], v[4], col, col, col, col);
 }
 
 function buildBufferGeometry(positions, colors, indices) {
@@ -231,7 +230,7 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 	const maxX = minX + tileSize;
 	const minZ = tileZ * tileSize - tileSize * 0.5;
 	const maxZ = minZ + tileSize;
-	const pad = roadNetwork.sampleStep * 2.0;
+	const pad = roadNetwork.sampleStep * 3.0;
 
 	const halfRoad = roadNetwork.roadWidth * 0.5;
 	const halfTotal = halfRoad + roadNetwork.shoulderWidth;
@@ -252,8 +251,6 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 		return idx;
 	};
 
-	// Emits a smooth road ribbon with SEPARATE flat asphalt vertices & sloped shoulder skirts
-	// so asphalt normals stay crisp & flat (never shaded like a round tube).
 	const emitRoadStrip = (run) => {
 		if (run.length < 2) return;
 
@@ -269,28 +266,29 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 			const rxOuter = p.x + p.rx * halfTotal;
 			const rzOuter = p.z + p.rz * halfTotal;
 
-			const yC = sampleTerrainGridHeight(terrain, p.x, p.z, resolution);
-			const yLE = sampleTerrainGridHeight(terrain, lxEdge, lzEdge, resolution);
-			const yRE = sampleTerrainGridHeight(terrain, rxEdge, rzEdge, resolution);
-			const yLO = sampleTerrainGridHeight(terrain, lxOuter, lzOuter, resolution);
-			const yRO = sampleTerrainGridHeight(terrain, rxOuter, rzOuter, resolution);
+			const yC = sampleTerrainGridHeight(terrain, p.x, p.z, resolution, roads);
+			const yLE = sampleTerrainGridHeight(terrain, lxEdge, lzEdge, resolution, roads);
+			const yRE = sampleTerrainGridHeight(terrain, rxEdge, rzEdge, resolution, roads);
+			const yLO = sampleTerrainGridHeight(terrain, lxOuter, lzOuter, resolution, roads);
+			const yRO = sampleTerrainGridHeight(terrain, rxOuter, rzOuter, resolution, roads);
 
-			const minDeckY = Math.max(p.roadY, yC, yLE, yRE) + surfaceLift;
+			const minDeckY = p.isBridge
+				? p.roadY + surfaceLift
+				: Math.max(p.roadY, yC, yLE, yRE) + surfaceLift;
 			samples[k] = {
 				lxOuter, lzOuter, lxEdge, lzEdge, rxEdge, rzEdge, rxOuter, rzOuter,
-				yLO, yRO, minDeckY, deckY: minDeckY,
+				yLO, yRO, minDeckY, deckY: minDeckY, pinned: p.isBridge,
 			};
 		}
 
-		// Smooth vertical profile along the road without ever dipping below terrain
 		for (let pass = 0; pass < 2; pass++) {
 			for (let k = 1; k < samples.length - 1; k++) {
+				if (samples[k].pinned) continue;
 				const avg = samples[k - 1].deckY * 0.25 + samples[k].deckY * 0.5 + samples[k + 1].deckY * 0.25;
 				samples[k].deckY = Math.max(samples[k].minDeckY, avg);
 			}
 		}
 
-		// 1. Flat asphalt surface (2 shared verts per ring)
 		const asphaltStart = positions.length / 3;
 		for (let k = 0; k < samples.length; k++) {
 			const s = samples[k];
@@ -303,7 +301,6 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 			indices.push(r0, r0 + 1, r1 + 1, r0, r1 + 1, r1);
 		}
 
-		// 2. Left sloped earth shoulder skirt (separate verts so asphalt normal stays flat)
 		const leftStart = positions.length / 3;
 		for (let k = 0; k < samples.length; k++) {
 			const s = samples[k];
@@ -317,7 +314,6 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 			indices.push(r0, r0 + 1, r1 + 1, r0, r1 + 1, r1);
 		}
 
-		// 3. Right sloped earth shoulder skirt
 		const rightStart = positions.length / 3;
 		for (let k = 0; k < samples.length; k++) {
 			const s = samples[k];
@@ -340,7 +336,6 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 			? trimRoadPoints(road.points, trimStart, trimEnd)
 			: road.points;
 
-		// Split road into contiguous land runs that intersect this tile
 		let run = [];
 		const flushRun = () => {
 			if (run.length >= 2) {
@@ -357,7 +352,6 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 				p.z >= minZ - pad &&
 				p.z <= maxZ + pad;
 
-			// Include bridge boundary endpoints so land road connects seamlessly to bridge abutments
 			const prevIsLand = i > 0 && !pts[i - 1].isBridge;
 			const nextIsLand = i < pts.length - 1 && !pts[i + 1].isBridge;
 			const usable = inTile && (!p.isBridge || prevIsLand || nextIsLand);
@@ -374,9 +368,6 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 		flushRun();
 	}
 
-	// Smooth curved junctions at settlements:
-	// - 2 branches: continuous Quadratic Bezier highway curve (zero round knob!)
-	// - 3+ branches: flared intersection polygon with smooth Bezier curb fillets!
 	for (let j = 0; j < junctions.length; j++) {
 		const { settlement, branches } = junctions[j];
 
@@ -392,11 +383,9 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 					const z = inv * inv * b0.pz + 2 * inv * t * settlement.z + t * t * b1.pz;
 					let tx, tz;
 					if (k === 0) {
-						// Match branch 0 exact inward tangent so vertices stitch seamlessly
 						tx = -b0.dirX;
 						tz = -b0.dirZ;
 					} else if (k === steps) {
-						// Match branch 1 exact outward tangent so vertices stitch seamlessly
 						tx = b1.dirX;
 						tz = b1.dirZ;
 					} else {
@@ -421,7 +410,6 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 				continue;
 			}
 
-			// 3+ branches: sloped terrain-conforming flared intersection with exact per-branch heights!
 			const kCount = branches.length;
 			const branchEnds = [];
 			let sumDeckY = 0;
@@ -435,17 +423,16 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 				const bx = b.px - rx * halfRoad;
 				const bz = b.pz - rz * halfRoad;
 
-				const hMid = sampleTerrainGridHeight(terrain, b.px, b.pz, resolution);
-				const hA = sampleTerrainGridHeight(terrain, ax, az, resolution);
-				const hB = sampleTerrainGridHeight(terrain, bx, bz, resolution);
-				// Exact same deckY formula as emitRoadStrip so junction meets every branch with ZERO step!
+				const hMid = sampleTerrainGridHeight(terrain, b.px, b.pz, resolution, roads);
+				const hA = sampleTerrainGridHeight(terrain, ax, az, resolution, roads);
+				const hB = sampleTerrainGridHeight(terrain, bx, bz, resolution, roads);
 				const deckY = Math.max(b.roadY, hMid, hA, hB) + surfaceLift;
 				sumDeckY += deckY;
 
 				branchEnds.push({ b, rx, rz, ax, az, bx, bz, deckY });
 			}
 
-			const centerTerrainY = sampleTerrainGridHeight(terrain, settlement.x, settlement.z, resolution);
+			const centerTerrainY = sampleTerrainGridHeight(terrain, settlement.x, settlement.z, resolution, roads);
 			const centerY = Math.max(sumDeckY / kCount, centerTerrainY + surfaceLift);
 			const perimeter = [];
 			const filletArcs = [];
@@ -455,10 +442,8 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 				const curr = branchEnds[i];
 				const next = branchEnds[(i + 1) % kCount];
 
-				// Flat opening across current branch (B_i -> A_i) at exact branch deckY
 				perimeter.push([curr.bx, curr.deckY, curr.bz]);
 
-				// Compute smooth curb fillet control point between A_i and B_next
 				const det = curr.b.dirX * next.b.dirZ - curr.b.dirZ * next.b.dirX;
 				let ctrlX = settlement.x;
 				let ctrlZ = settlement.z;
@@ -485,14 +470,13 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 					const inv = 1 - t;
 					const fx = inv * inv * curr.ax + 2 * inv * t * ctrlX + t * t * next.bx;
 					const fz = inv * inv * curr.az + 2 * inv * t * ctrlZ + t * t * next.bz;
-					// Smoothly interpolate height from curr.deckY to next.deckY, hugging terrain
 					const smoothT = t * t * (3 - 2 * t);
 					const interpY = curr.deckY + (next.deckY - curr.deckY) * smoothT;
 					const fy = (s === 0)
 						? curr.deckY
 						: (s === filletSteps)
 							? next.deckY
-							: Math.max(interpY, sampleTerrainGridHeight(terrain, fx, fz, resolution) + surfaceLift);
+							: Math.max(interpY, sampleTerrainGridHeight(terrain, fx, fz, resolution, roads) + surfaceLift);
 					arc.push([fx, fy, fz]);
 					if (s < filletSteps) {
 						perimeter.push([fx, fy, fz]);
@@ -501,7 +485,6 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 				filletArcs.push(arc);
 			}
 
-			// Emit sloped terrain-conforming asphalt interior polygon (CW perimeter -> reverse winding for +Y up)
 			const centerIdx = pushVert(settlement.x, centerY, settlement.z, colAsphalt);
 			const perimStart = positions.length / 3;
 			for (let p = 0; p < perimeter.length; p++) {
@@ -512,7 +495,6 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 				indices.push(centerIdx, perimStart + pNext, perimStart + p);
 			}
 
-			// Emit sloped earth shoulder skirts ONLY along curved curb fillets (separate verts!)
 			for (let a = 0; a < filletArcs.length; a++) {
 				const arc = filletArcs[a];
 				const skirtStart = positions.length / 3;
@@ -523,12 +505,11 @@ function buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junct
 					const tx = pNext[0] - pPrev[0];
 					const tz = pNext[2] - pPrev[2];
 					const tLen = Math.hypot(tx, tz) || 1;
-					// Outward normal from CW perimeter is (+tz, -tx)
 					const oxDir = tz / tLen;
 					const ozDir = -tx / tLen;
 					const ox = pCurr[0] + oxDir * roadNetwork.shoulderWidth;
 					const oz = pCurr[2] + ozDir * roadNetwork.shoulderWidth;
-					const oy = Math.min(sampleTerrainGridHeight(terrain, ox, oz, resolution), pCurr[1]) - skirtDrop;
+					const oy = Math.min(sampleTerrainGridHeight(terrain, ox, oz, resolution, roads), pCurr[1]) - skirtDrop;
 
 					pushVert(pCurr[0], pCurr[1], pCurr[2], colShoulder);
 					pushVert(ox, oy, oz, colShoulder);
@@ -569,7 +550,6 @@ function buildTileBridgesGeometry(terrain, roadNetwork, bridges) {
 		const pts = bridges[b].points;
 		if (pts.length < 2) continue;
 
-		// Build continuous bridge deck + side girders + guardrails
 		for (let i = 0; i < pts.length - 1; i++) {
 			const a = pts[i];
 			const c = pts[i + 1];
@@ -593,17 +573,13 @@ function buildTileBridgesGeometry(terrain, roadNetwork, bridges) {
 			const cBotL = [c.x - c.rx * halfDeck, ycBot, c.z - c.rz * halfDeck];
 			const cBotR = [c.x + c.rx * halfDeck, ycBot, c.z + c.rz * halfDeck];
 
-			// Asphalt road surface (+Y)
 			pushQuad(positions, colors, indices, aRoadL, aRoadR, cRoadR, cRoadL, colAsphalt, colAsphalt, colAsphalt, colAsphalt);
-			// Sidewalks / curbs (+Y)
 			pushQuad(positions, colors, indices, aDeckL, aRoadL, cRoadL, cDeckL, colConcrete, colConcrete, colConcrete, colConcrete);
 			pushQuad(positions, colors, indices, aRoadR, aDeckR, cDeckR, cRoadR, colConcrete, colConcrete, colConcrete, colConcrete);
-			// Side girders (-R left, +R right) & underside (-Y)
 			pushQuad(positions, colors, indices, aBotL, aDeckL, cDeckL, cBotL, colConcreteDark, colConcrete, colConcrete, colConcreteDark);
 			pushQuad(positions, colors, indices, aDeckR, aBotR, cBotR, cDeckR, colConcrete, colConcreteDark, colConcreteDark, colConcrete);
 			pushQuad(positions, colors, indices, aBotR, aBotL, cBotL, cBotR, colConcreteDark, colConcreteDark, colConcreteDark, colConcreteDark);
 
-			// Left & right guardrails / parapets
 			for (const side of [-1, 1]) {
 				const innerOff = side * (halfDeck - railWidth);
 				const outerOff = side * halfDeck;
@@ -629,7 +605,6 @@ function buildTileBridgesGeometry(terrain, roadNetwork, bridges) {
 			}
 		}
 
-		// Bank abutments at start and end so the bridge anchors solidly into terrain
 		for (const endPt of [pts[0], pts[pts.length - 1]]) {
 			const topY = endPt.roadY + surfaceLift - deckThickness * 0.5;
 			const groundY = Math.min(endPt.terrainY - 6 * roadNetwork.worldUnit, topY - 4);
@@ -650,7 +625,6 @@ function buildTileBridgesGeometry(terrain, roadNetwork, bridges) {
 			);
 		}
 
-		// Bridge piers / pillars descending into the riverbed
 		let accumDist = 0;
 		let nextPierDist = pierSpacing * 0.65;
 		for (let i = 1; i < pts.length - 1; i++) {
@@ -686,7 +660,6 @@ function buildTileBridgesGeometry(terrain, roadNetwork, bridges) {
 					);
 				}
 
-				// Crossbeam under deck connecting twin piers
 				pushBox(
 					positions,
 					colors,
@@ -759,7 +732,6 @@ export function createTileProps(tileX, tileZ, terrain, resources, resolution, se
 	const seed = (((tileX + 4096) * 73856093) ^ ((tileZ + 4096) * 19349663) ^ (terrain.seed * 83492791)) >>> 0;
 	const rand = seededRand(seed);
 
-	// 1. Buildings: placed around road-connected settlements, aligned to roads, never on roads
 	const buildingPlacements = [];
 	const maxBuildingHeight = terrain.baseHeight + terrain.heightMultiplier * 0.38;
 	const minBuildingHeight = Math.max(4.5, terrain.heightMultiplier * 0.015);
@@ -781,12 +753,10 @@ export function createTileProps(tileX, tileZ, terrain, resources, resolution, se
 			if (h < minBuildingHeight || h > maxBuildingHeight) continue;
 			if (estimateSlope(terrain, wx, wz, 16 * propScale) > 0.24) continue;
 
-			// Never place a house on a road or shoulder
 			if (roadNetwork.isNearRoad(wx, wz, roads, houseRoadClearance)) {
 				continue;
 			}
 
-			// Prevent houses overlapping each other
 			let overlaps = false;
 			for (let k = 0; k < buildingPlacements.length; k++) {
 				const other = buildingPlacements[k];
@@ -799,7 +769,6 @@ export function createTileProps(tileX, tileZ, terrain, resources, resolution, se
 			}
 			if (overlaps) continue;
 
-			// Orient house along the nearest road direction for natural village layout
 			let rotY = -0.24 + Math.floor(sRand() * 4) * Math.PI * 0.5;
 			if (roads.length > 0) {
 				const nearest = roadNetwork.getNearestRoadInfo(wx, wz, roads);
@@ -816,7 +785,6 @@ export function createTileProps(tileX, tileZ, terrain, resources, resolution, se
 		}
 	}
 
-	// 2. Trees: strictly excluded from roads, shoulders, bridges, and buildings
 	const treeTarget = Math.max(24, Math.round(115 * scaleFactor * scaleFactor));
 	const treePlacements = [];
 	const treeRoadClearance = roadHalfClearance + 14 * propScale;
@@ -835,12 +803,10 @@ export function createTileProps(tileX, tileZ, terrain, resources, resolution, se
 		const cluster = terrain.noise(wx * 0.00075 + 14.2, wz * 0.00075 - 8.6);
 		if (cluster < -0.15) continue;
 
-		// Never place a tree on a road or bridge
 		if (roadNetwork.isNearRoad(wx, wz, roads, treeRoadClearance)) {
 			continue;
 		}
 
-		// Never place a tree inside a house
 		let hitsHouse = false;
 		for (let k = 0; k < buildingPlacements.length; k++) {
 			const b = buildingPlacements[k];
@@ -858,7 +824,6 @@ export function createTileProps(tileX, tileZ, terrain, resources, resolution, se
 		treePlacements.push({ wx, wy: h - 1.5 * propScale, wz, s, rotY: rand() * Math.PI * 2, shade });
 	}
 
-	// 3. Roads & Bridges meshes for this tile
 	const roadGeo = roadsEnabled
 		? buildTileRoadsGeometry(tileX, tileZ, terrain, roadNetwork, roads, junctions, resolution)
 		: null;

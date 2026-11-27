@@ -68,6 +68,11 @@ export function createTileStreamingController(terrain, scene, settings) {
 			for (let i = 0; i < lodLimit; i += 1) {
 				const item = lodUpdates[i];
 				terrain.updateTileMesh(item.tile, item.targetResolution);
+				const key = createTileKey(item.tile.userData.tileX, item.tile.userData.tileZ);
+				if (tileProps.has(key)) {
+					disposePropsGroup(scene, tileProps.get(key));
+					tileProps.delete(key);
+				}
 			}
 		}
 

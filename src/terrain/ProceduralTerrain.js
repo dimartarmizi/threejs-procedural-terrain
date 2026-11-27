@@ -116,11 +116,20 @@ export class ProceduralTerrain {
 
 	updateTileGeometry(geometry, worldOffsetX, worldOffsetZ) {
 		const position = geometry.attributes.position;
+		const half = this.tileSize * 0.5;
+		const tileRoads = this.roadNetwork.getRoadsInBounds(
+			worldOffsetX - half,
+			worldOffsetX + half,
+			worldOffsetZ - half,
+			worldOffsetZ + half
+		);
 
 		for (let index = 0; index < position.count; index += 1) {
 			const worldX = worldOffsetX + position.getX(index);
 			const worldZ = worldOffsetZ + position.getZ(index);
-			const height = this.sampleHeight(worldX, worldZ);
+			const height = tileRoads.length > 0
+				? this.roadNetwork.sampleGradedTerrainHeight(worldX, worldZ, tileRoads)
+				: this.sampleHeight(worldX, worldZ);
 			position.setY(index, height);
 		}
 

@@ -58,7 +58,7 @@ function distToSegmentSq(px, pz, ax, az, bx, bz) {
 	return { distSq: ex * ex + ez * ez, t, dx, dz };
 }
 
-export function sampleTerrainGridHeight(terrain, wx, wz, resolution = terrain.tileResolution) {
+export function sampleTerrainGridHeight(terrain, wx, wz, resolution, roads) {
 	const tileSize = terrain.tileSize;
 	const step = tileSize / resolution;
 	const shiftedX = wx + tileSize * 0.5;
@@ -71,10 +71,11 @@ export function sampleTerrainGridHeight(terrain, wx, wz, resolution = terrain.ti
 	const u = clamp((wx - x0) / step, 0, 1);
 	const v = clamp((wz - z0) / step, 0, 1);
 
-	const h00 = terrain.sampleHeight(x0, z0);
-	const h10 = terrain.sampleHeight(x0 + step, z0);
-	const h01 = terrain.sampleHeight(x0, z0 + step);
-	const h11 = terrain.sampleHeight(x0 + step, z0 + step);
+	const rn = terrain.roadNetwork;
+	const h00 = rn.sampleGradedTerrainHeight(x0, z0, roads);
+	const h10 = rn.sampleGradedTerrainHeight(x0 + step, z0, roads);
+	const h01 = rn.sampleGradedTerrainHeight(x0, z0 + step, roads);
+	const h11 = rn.sampleGradedTerrainHeight(x0 + step, z0 + step, roads);
 
 	if (u + v <= 1) {
 		return h00 + u * (h10 - h00) + v * (h01 - h00);
@@ -100,10 +101,16 @@ export class RoadNetwork {
 		this.waterThreshold = Math.max(1.2, 2.5 * worldUnit);
 		this.bankThreshold = Math.max(2.2, 4.5 * worldUnit);
 		this.bridgeMinY = Math.max(3.6, 11.0 * worldUnit);
-		this.maxBridgeLength = this.cellSize * 0.55;
+		this.maxBridgeLength = this.cellSize * 0.58;
 		this.minRavineDepth = Math.max(4.5, 14.0 * worldUnit);
 		this.maxRoadGrade = 0.20;
+		this.maxLandGrade = 0.34;
+		this.maxBridgeGrade = 0.15;
 		this.rimFlatGrade = 0.085;
+		const gridStep = terrain.tileSize / terrain.tileResolution;
+		this.gradeFlatRadius = Math.max(this.roadWidth * 0.5 + this.shoulderWidth * 0.6, gridStep * 0.85);
+		this.gradeBlendWidth = Math.max(12.0, gridStep * 1.15, 44.0 * worldUnit);
+		this.roadbedRecess = Math.max(0.15, 0.55 * worldUnit);
 		this.minSettlementHeight = Math.max(4.0, terrain.heightMultiplier * 0.015);
 		this.maxSettlementHeight = terrain.baseHeight + terrain.heightMultiplier * 0.35;
 	}
@@ -120,7 +127,6 @@ export class RoadNetwork {
 		}
 
 		const rand = seededRand(hash2D(cx, cz, this.terrain.seed + 101));
-		// Leave ~22% of cells as open countryside/farmland so villages don't form a rigid grid
 		if (rand() < 0.22) {
 			this.settlementCache.set(key, null);
 			return null;
@@ -141,7 +147,6 @@ export class RoadNetwork {
 			const slope = estimateSlope(this.terrain, wx, wz, this.slopeStep);
 			if (slope > 0.20) continue;
 
-			// Prefer flat lowland/valley areas (where farmland naturally appears)
 			const elevNorm = (h - this.minSettlementHeight) / Math.max(1, this.maxSettlementHeight - this.minSettlementHeight);
 			const score = slope * 4.5 + elevNorm * 0.85 + rand() * 0.12;
 			if (score < bestScore) {
@@ -178,9 +183,6 @@ export class RoadNetwork {
 		const maxDist = this.cellSize * 2.25;
 		if (distSq > maxDist * maxDist) return false;
 
-		// Relative Neighborhood Graph (RNG): connect A and B only if no other settlement C
-		// is strictly closer to BOTH A and B than A and B are to each other.
-		// RNG is planar, connected, and produces natural highways (degree ~2-3) instead of 5-6 way stars.
 		const minCX = Math.min(a.cx, b.cx) - 1;
 		const maxCX = Math.max(a.cx, b.cx) + 1;
 		const minCZ = Math.min(a.cz, b.cz) - 1;
@@ -204,17 +206,15 @@ export class RoadNetwork {
 				if (daSq < distSq) aHasCloser = true;
 				if (dbSq < distSq) bHasCloser = true;
 
-				// Lune test (slightly relaxed factor 0.98 keeps graph organic & sparse)
 				if (daSq < distSq * 0.98 && dbSq < distSq * 0.98) {
 					return false;
 				}
 			}
 		}
 
-		// Deterministically thin some redundant long loop edges when both villages already have closer links
-		if (aHasCloser && bHasCloser && distSq > (this.cellSize * 1.25) * (this.cellSize * 1.25)) {
+		if (aHasCloser && bHasCloser && distSq > (this.cellSize * 1.35) * (this.cellSize * 1.35)) {
 			const edgeSeed = hash2D(a.cx + b.cx * 31, a.cz + b.cz * 31, this.terrain.seed + 503);
-			if ((edgeSeed % 100) < 28) {
+			if ((edgeSeed % 100) < 15) {
 				return false;
 			}
 		}
@@ -253,11 +253,8 @@ export class RoadNetwork {
 			cost += ((h - maxPreferredH) / Math.max(1, this.terrain.heightMultiplier)) * 22.0;
 		}
 		if (h < this.waterThreshold) {
-			// Moderate water penalty so road crosses rivers cleanly at narrow/perpendicular points
-			// rather than running lengthwise along rivers.
 			cost += 6.5 + Math.max(0, -h) * 0.15;
 		} else if (slope < 0.12 && h < this.maxSettlementHeight) {
-			// Slight bonus for flat lowland/farmland valleys
 			cost -= 0.4;
 		}
 		return cost;
@@ -268,30 +265,29 @@ export class RoadNetwork {
 		const controlCount = clamp(Math.round(totalDist / (this.cellSize * 0.14)), 6, 16);
 		const controls = [];
 
-		// Gentle deterministic S-curve meander so roads curve organically across valleys
 		const dirX = (b.x - a.x) / (totalDist || 1);
 		const dirZ = (b.z - a.z) / (totalDist || 1);
 		const perpX = -dirZ;
 		const perpZ = dirX;
 		const mRand = seededRand(hash2D(a.cx * 17 + b.cx, a.cz * 17 + b.cz, this.terrain.seed + 773));
-		const meanderAmp1 = (mRand() - 0.5) * totalDist * 0.16;
-		const meanderAmp2 = (mRand() - 0.5) * totalDist * 0.09;
+		const meanderAmp1 = (mRand() - 0.5) * totalDist * 0.12;
+		const meanderAmp2 = (mRand() - 0.5) * totalDist * 0.06;
 		const meanderPhase = mRand() * Math.PI * 2;
 
 		for (let i = 0; i <= controlCount; i++) {
 			const t = i / controlCount;
-			const env = Math.sin(t * Math.PI);
-			const wave = (Math.sin(t * Math.PI) * meanderAmp1 + Math.sin(t * Math.PI * 2 + meanderPhase) * meanderAmp2) * env;
+			const sEnv = Math.sin(t * Math.PI);
+			const env = sEnv * sEnv;
+			const wave = (sEnv * meanderAmp1 + Math.sin(t * Math.PI * 2 + meanderPhase) * meanderAmp2) * env;
 			controls.push({
 				x: lerp(a.x, b.x, t) + perpX * wave,
 				z: lerp(a.z, b.z, t) + perpZ * wave,
 			});
 		}
 
-		// Terrain-aware lateral relaxation to route around steep hills & follow valleys
-		const maxOffsetStep = this.cellSize * 0.065;
-		for (let pass = 0; pass < 7; pass++) {
-			const stepScale = maxOffsetStep * (1 - pass * 0.1);
+		const maxOffsetStep = this.cellSize * 0.105;
+		for (let pass = 0; pass < 10; pass++) {
+			const stepScale = maxOffsetStep * (1 - pass * 0.08);
 			for (let i = 1; i < controlCount; i++) {
 				const prev = controls[i - 1];
 				const curr = controls[i];
@@ -310,12 +306,11 @@ export class RoadNetwork {
 				let bestZ = curr.z;
 				let bestCost = Infinity;
 
-				for (let k = -2; k <= 2; k++) {
+				for (let k = -3; k <= 3; k++) {
 					const cx = curr.x + nx * stepScale * k;
 					const cz = curr.z + nz * stepScale * k;
-					// Smoothness/curvature penalty to keep bends organic
 					const bendDist = Math.hypot(cx - midX, cz - midZ) / Math.max(1, tLen * 0.5);
-					const cost = this.evaluateWaypointCost(cx, cz) + bendDist * bendDist * 2.2;
+					const cost = this.evaluateWaypointCost(cx, cz) + bendDist * bendDist * 1.8;
 					if (cost < bestCost) {
 						bestCost = cost;
 						bestX = cx;
@@ -323,12 +318,11 @@ export class RoadNetwork {
 					}
 				}
 
-				curr.x = lerp(curr.x, bestX, 0.65);
-				curr.z = lerp(curr.z, bestZ, 0.65);
+				curr.x = lerp(curr.x, bestX, 0.68);
+				curr.z = lerp(curr.z, bestZ, 0.68);
 			}
 		}
 
-		// Extra Laplacian smoothing passes on interior control points for silky curves
 		for (let sp = 0; sp < 2; sp++) {
 			for (let i = 1; i < controlCount; i++) {
 				const prev = controls[i - 1];
@@ -339,7 +333,6 @@ export class RoadNetwork {
 			}
 		}
 
-		// Resample with Catmull-Rom spline at uniform density
 		const points = [];
 		const approxSteps = Math.max(16, Math.ceil(totalDist / this.sampleStep));
 		const segCount = controls.length - 1;
@@ -371,7 +364,6 @@ export class RoadNetwork {
 			});
 		}
 
-		// Compute tangents & right vectors
 		for (let i = 0; i < points.length; i++) {
 			const prev = points[Math.max(0, i - 1)];
 			const next = points[Math.min(points.length - 1, i + 1)];
@@ -384,7 +376,6 @@ export class RoadNetwork {
 			points[i].rz = points[i].tx;
 		}
 
-		// Detect river crossings and deep ravines/canyons, spanning from upper rim A to upper rim B
 		const bridges = [];
 		const nPts = points.length;
 		const cumDist = new Float32Array(nPts);
@@ -405,7 +396,6 @@ export class RoadNetwork {
 				continue;
 			}
 
-			// Walk backward to the upper rim (side A) of the gorge/river
 			let start = i - 1;
 			while (start > 0) {
 				if (cumDist[i] - cumDist[start - 1] > this.maxBridgeLength * 0.55) break;
@@ -418,9 +408,7 @@ export class RoadNetwork {
 				}
 			}
 
-			// Walk forward past the bottom/water and up to the opposite upper rim (side B)
 			let end = i;
-			// Phase 1: descend to valley/river floor and cross water
 			while (end < nPts - 1) {
 				if (cumDist[end] - cumDist[start] > this.maxBridgeLength) break;
 				const dSeg = Math.max(0.001, cumDist[end + 1] - cumDist[end]);
@@ -431,7 +419,6 @@ export class RoadNetwork {
 					break;
 				}
 			}
-			// Phase 2: climb up the opposite canyon wall to the upper rim
 			while (end < nPts - 1) {
 				if (cumDist[end + 1] - cumDist[start] > this.maxBridgeLength) break;
 				const dSeg = Math.max(0.001, cumDist[end + 1] - cumDist[end]);
@@ -443,14 +430,12 @@ export class RoadNetwork {
 				}
 			}
 
-			// Validate that this span actually crosses water or a significant ravine
 			let hasWater = false;
 			let maxDepthBelowChord = 0;
 			const startY = Math.max(points[start].terrainY, this.bridgeMinY * 0.8);
 			const endY = Math.max(points[end].terrainY, this.bridgeMinY * 0.8);
 			const totalSpanDist = Math.max(0.001, cumDist[end] - cumDist[start]);
 
-			// Trim if interior terrain pokes above the rim-to-rim chord
 			let validSpan = end - start >= 2;
 			if (validSpan) {
 				for (let k = start + 1; k < end; k++) {
@@ -462,7 +447,6 @@ export class RoadNetwork {
 				}
 			}
 
-			// Reject unrealistic ocean causeways (long water spans with submerged endpoints)
 			if (hasWater && (points[start].terrainY < this.waterThreshold || points[end].terrainY < this.waterThreshold)) {
 				return null;
 			}
@@ -471,7 +455,6 @@ export class RoadNetwork {
 			}
 
 			if (validSpan && (hasWater || maxDepthBelowChord >= this.minRavineDepth)) {
-				// Merge with previous span if they overlap or are nearly touching
 				if (spanRanges.length > 0 && start <= spanRanges[spanRanges.length - 1].end + 3) {
 					const prev = spanRanges[spanRanges.length - 1];
 					if (cumDist[end] - cumDist[prev.start] <= this.maxBridgeLength * 1.15) {
@@ -488,41 +471,80 @@ export class RoadNetwork {
 			}
 		}
 
-		// Apply rim-to-rim bridge elevation profiles
+		const halfDeckCheck = this.roadWidth * 0.55;
 		for (let s = 0; s < spanRanges.length; s++) {
-			const { start, end } = spanRanges[s];
-			const spanLen = Math.max(0.001, cumDist[end] - cumDist[start]);
-			const deckStartY = Math.max(points[start].terrainY, this.bridgeMinY);
-			const deckEndY = Math.max(points[end].terrainY, this.bridgeMinY);
-			const archHeight = Math.min(spanLen * 0.015, Math.max(1.0, 4.5 * this.worldUnit));
+			let { start, end } = spanRanges[s];
+			if (end - start < 2) continue;
+
+			let spanLen = Math.max(0.001, cumDist[end] - cumDist[start]);
+			let deckStartY = Math.max(points[start].terrainY, this.bridgeMinY);
+			let deckEndY = Math.max(points[end].terrainY, this.bridgeMinY);
+
+			let extGuard = 0;
+			while (Math.abs(deckEndY - deckStartY) / spanLen > this.maxBridgeGrade && extGuard < 6) {
+				extGuard += 1;
+				if (deckStartY < deckEndY && start > 1) {
+					start -= 1;
+					deckStartY = Math.max(points[start].terrainY, this.bridgeMinY);
+				} else if (deckEndY < deckStartY && end < nPts - 2) {
+					end += 1;
+					deckEndY = Math.max(points[end].terrainY, this.bridgeMinY);
+				} else {
+					break;
+				}
+				spanLen = Math.max(0.001, cumDist[end] - cumDist[start]);
+				if (spanLen > this.maxBridgeLength) break;
+			}
+			if (Math.abs(deckEndY - deckStartY) / spanLen > this.maxBridgeGrade) {
+				return null;
+			}
+
+			const archHeight = Math.min(spanLen * 0.012, Math.max(0.8, 3.5 * this.worldUnit));
+			let requiredLift = 0;
+			let spanHasWater = false;
+			let spanMaxClear = 0;
+
+			for (let k = start + 1; k < end; k++) {
+				const t = (cumDist[k] - cumDist[start]) / spanLen;
+				const deckY = lerp(deckStartY, deckEndY, t) + Math.sin(t * Math.PI) * archHeight;
+				const pt = points[k];
+				if (pt.terrainY < this.waterThreshold) spanHasWater = true;
+				const gL = this.terrain.sampleHeight(pt.x - pt.rx * halfDeckCheck, pt.z - pt.rz * halfDeckCheck);
+				const gR = this.terrain.sampleHeight(pt.x + pt.rx * halfDeckCheck, pt.z + pt.rz * halfDeckCheck);
+				const maxGround = Math.max(pt.terrainY, gL, gR);
+				if (maxGround + 0.6 > deckY) {
+					requiredLift = Math.max(requiredLift, maxGround + 0.6 - deckY);
+				}
+				spanMaxClear = Math.max(spanMaxClear, deckY - pt.terrainY);
+			}
+
+			if (requiredLift > Math.max(8.0, 22.0 * this.worldUnit)) {
+				return null;
+			}
+			if (!spanHasWater && spanMaxClear < this.minRavineDepth * 0.65) continue;
+
+			deckStartY += requiredLift;
+			deckEndY += requiredLift;
 
 			for (let k = start; k <= end; k++) {
 				const t = (cumDist[k] - cumDist[start]) / spanLen;
 				const baseDeck = lerp(deckStartY, deckEndY, t);
 				const arch = Math.sin(t * Math.PI) * archHeight;
-				const minDeck = Math.max(this.bridgeMinY, points[k].terrainY + 0.35);
-				points[k].roadY = Math.max(minDeck, baseDeck + arch);
+				points[k].roadY = Math.max(this.bridgeMinY, baseDeck + arch);
 				points[k].isBridge = true;
 			}
 
-			// Smooth approach ramps right before start and after end
-			const rampLen = 4;
+			const rampLen = 8;
 			for (let r = 1; r <= rampLen; r++) {
+				const blend = 1 - r / (rampLen + 1);
+				const smooth = blend * blend * (3 - 2 * blend);
 				const idxBefore = start - r;
 				if (idxBefore >= 0 && !points[idxBefore].isBridge) {
-					const blend = 1 - r / (rampLen + 1);
-					points[idxBefore].roadY = Math.max(
-						points[idxBefore].terrainY,
-						lerp(points[idxBefore].terrainY, points[start].roadY, blend * blend)
-					);
+					points[idxBefore].roadY = lerp(points[idxBefore].terrainY, points[start].roadY, smooth);
 				}
 				const idxAfter = end + r;
 				if (idxAfter < nPts && !points[idxAfter].isBridge) {
-					const blend = 1 - r / (rampLen + 1);
-					points[idxAfter].roadY = Math.max(
-						points[idxAfter].terrainY,
-						lerp(points[idxAfter].terrainY, points[end].roadY, blend * blend)
-					);
+					points[idxAfter].roadY = lerp(points[idxAfter].terrainY, points[end].roadY, smooth);
 				}
 			}
 
@@ -537,7 +559,28 @@ export class RoadNetwork {
 			});
 		}
 
-		// Bounding box for fast tile intersection checks
+		for (let pass = 0; pass < 4; pass++) {
+			for (let k = 1; k < nPts - 1; k++) {
+				if (points[k].isBridge || points[k - 1].isBridge || points[k + 1].isBridge) continue;
+				points[k].roadY = points[k - 1].roadY * 0.25 + points[k].roadY * 0.5 + points[k + 1].roadY * 0.25;
+			}
+		}
+
+		for (let k = 0; k < nPts - 1; k++) {
+			const p0 = points[k];
+			const p1 = points[k + 1];
+			if (p0.isBridge && p1.isBridge) continue;
+			const segLen = Math.max(0.001, cumDist[k + 1] - cumDist[k]);
+			const grade = Math.abs(p1.roadY - p0.roadY) / segLen;
+			if (grade > this.maxLandGrade) {
+				return null;
+			}
+			const crossSlope = estimateSlope(this.terrain, p0.x, p0.z, this.slopeStep);
+			if (crossSlope > 0.72) {
+				return null;
+			}
+		}
+
 		let minX = Infinity;
 		let maxX = -Infinity;
 		let minZ = Infinity;
@@ -591,7 +634,6 @@ export class RoadNetwork {
 			const pts = road.points;
 			const n = pts.length;
 
-			// Find point along road at desiredSetback distance from settlement (without entering a bridge)
 			let accum = 0;
 			let targetPt = isStart ? pts[1] : pts[n - 2];
 			let maxSafeDist = 0;
@@ -648,7 +690,6 @@ export class RoadNetwork {
 				}
 			}
 
-			// Exact outward road tangent at the trimmed endpoint (guarantees 100% vertex match with road strip)
 			const dirX = isStart ? targetPt.tx : -targetPt.tx;
 			const dirZ = isStart ? targetPt.tz : -targetPt.tz;
 			const setback = Math.min(desiredSetback, maxSafeDist);
@@ -689,6 +730,104 @@ export class RoadNetwork {
 		return 0;
 	}
 
+	getRoadsInBounds(minX, maxX, minZ, maxZ) {
+		if (this.terrain.terrainType === 'desert') return [];
+		const margin = this.gradeFlatRadius + this.gradeBlendWidth;
+		const minCX = Math.floor((minX - this.cellSize) / this.cellSize);
+		const maxCX = Math.floor((maxX + this.cellSize) / this.cellSize);
+		const minCZ = Math.floor((minZ - this.cellSize) / this.cellSize);
+		const maxCZ = Math.floor((maxZ + this.cellSize) / this.cellSize);
+
+		const roads = [];
+		const seenEdges = new Set();
+
+		for (let cz = minCZ; cz <= maxCZ; cz++) {
+			for (let cx = minCX; cx <= maxCX; cx++) {
+				const s = this.getSettlement(cx, cz);
+				if (!s) continue;
+				for (let dz = -2; dz <= 2; dz++) {
+					for (let dx = -2; dx <= 2; dx++) {
+						if (dx === 0 && dz === 0) continue;
+						if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+						const nx = cx + dx;
+						const nz = cz + dz;
+						const edgeKey = this.getEdgeKey(cx, cz, nx, nz);
+						if (seenEdges.has(edgeKey)) continue;
+						seenEdges.add(edgeKey);
+
+						const road = this.getRoadEdge(cx, cz, nx, nz);
+						if (!road) continue;
+						if (
+							road.bounds.maxX < minX - margin ||
+							road.bounds.minX > maxX + margin ||
+							road.bounds.maxZ < minZ - margin ||
+							road.bounds.minZ > maxZ + margin
+						) {
+							continue;
+						}
+						roads.push(road);
+					}
+				}
+			}
+		}
+		return roads;
+	}
+
+	sampleGradedTerrainHeight(wx, wz, roads) {
+		const rawY = this.terrain.sampleHeight(wx, wz);
+		const flatR = this.gradeFlatRadius;
+		const outerR = flatR + this.gradeBlendWidth;
+		const outerRSq = outerR * outerR;
+
+		let bestDistSq = outerRSq;
+		let targetY = rawY;
+		let isBridgeClosest = false;
+
+		for (let r = 0; r < roads.length; r++) {
+			const road = roads[r];
+			if (
+				wx < road.bounds.minX - outerR ||
+				wx > road.bounds.maxX + outerR ||
+				wz < road.bounds.minZ - outerR ||
+				wz > road.bounds.maxZ + outerR
+			) {
+				continue;
+			}
+
+			const pts = road.points;
+			for (let i = 0; i < pts.length - 1; i++) {
+				const a = pts[i];
+				const b = pts[i + 1];
+
+				const minSegX = a.x < b.x ? a.x : b.x;
+				const maxSegX = a.x > b.x ? a.x : b.x;
+				if (wx < minSegX - outerR || wx > maxSegX + outerR) continue;
+				const minSegZ = a.z < b.z ? a.z : b.z;
+				const maxSegZ = a.z > b.z ? a.z : b.z;
+				if (wz < minSegZ - outerR || wz > maxSegZ + outerR) continue;
+
+				const hit = distToSegmentSq(wx, wz, a.x, a.z, b.x, b.z);
+				if (hit.distSq < bestDistSq) {
+					bestDistSq = hit.distSq;
+					targetY = lerp(a.roadY, b.roadY, hit.t);
+					isBridgeClosest = a.isBridge && b.isBridge;
+				}
+			}
+		}
+
+		if (bestDistSq >= outerRSq) return rawY;
+
+		const desiredY = targetY - this.roadbedRecess;
+		const gradedY = isBridgeClosest ? Math.min(rawY, desiredY) : desiredY;
+		const dist = Math.sqrt(bestDistSq);
+		if (dist <= flatR) {
+			return gradedY;
+		}
+		const t = (dist - flatR) / (outerR - flatR);
+		const smooth = t * t * (3 - 2 * t);
+		return lerp(gradedY, rawY, smooth);
+	}
+
 	getTileRoadData(tileX, tileZ) {
 		if (this.terrain.terrainType === 'desert') {
 			return { settlements: [], roads: [], bridges: [], junctions: [] };
@@ -706,7 +845,7 @@ export class RoadNetwork {
 		const minCZ = Math.floor((minZ - this.cellSize) / this.cellSize);
 		const maxCZ = Math.floor((maxZ + this.cellSize) / this.cellSize);
 
-		const settlements = [];
+		const candidateSettlements = [];
 		const roads = [];
 		const seenEdges = new Set();
 
@@ -715,12 +854,10 @@ export class RoadNetwork {
 				const s = this.getSettlement(cx, cz);
 				if (!s) continue;
 
-				// Settlement belongs to this tile if its center falls inside the tile
 				if (s.x >= minX && s.x < maxX && s.z >= minZ && s.z < maxZ) {
-					settlements.push(s);
+					candidateSettlements.push(s);
 				}
 
-				// Check neighbor cells in [-2..2] (skipping duplicates via seenEdges)
 				for (let dz = -2; dz <= 2; dz++) {
 					for (let dx = -2; dx <= 2; dx++) {
 						if (dx === 0 && dz === 0) continue;
@@ -734,7 +871,6 @@ export class RoadNetwork {
 						const road = this.getRoadEdge(cx, cz, nx, nz);
 						if (!road) continue;
 
-						// AABB intersection test with tile
 						if (
 							road.bounds.maxX < minX - margin ||
 							road.bounds.minX > maxX + margin ||
@@ -750,7 +886,6 @@ export class RoadNetwork {
 			}
 		}
 
-		// Bridges are owned by the single tile containing their midpoint (zero duplication)
 		const bridges = [];
 		for (let r = 0; r < roads.length; r++) {
 			const road = roads[r];
@@ -764,7 +899,13 @@ export class RoadNetwork {
 			}
 		}
 
-		// Smooth curved junctions at settlements where >= 2 road branches meet (owned by settlement's tile)
+		const connectedIds = new Set();
+		for (let r = 0; r < roads.length; r++) {
+			connectedIds.add(roads[r].a.id);
+			connectedIds.add(roads[r].b.id);
+		}
+		const settlements = candidateSettlements.filter((s) => connectedIds.has(s.id));
+
 		const junctions = [];
 		for (let s = 0; s < settlements.length; s++) {
 			const j = this.getSettlementJunction(settlements[s]);
