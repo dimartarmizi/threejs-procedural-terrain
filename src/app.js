@@ -68,6 +68,10 @@ export function startApp() {
 		updateWater() {
 			terrainSystem.update(camera.position);
 		},
+		updateProps() {
+			terrainSystem.refreshProps();
+			terrainSystem.update(camera.position);
+		},
 		updatePostProcessing() {
 			postProcessing.updateSettings();
 		},

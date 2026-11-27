@@ -54,6 +54,7 @@ export function createTerrainGui(settings, handlers) {
 		handlers.updateFog();
 		handlers.updateLight();
 		handlers.updateWater();
+		handlers.updateProps();
 		handlers.updatePostProcessing();
 		handlers.updateWireframe();
 		handlers.updateGridHelper();
@@ -132,6 +133,16 @@ export function createTerrainGui(settings, handlers) {
 		{
 			name: 'Water',
 			controls: [{ key: 'waterEnabled', name: 'enabled', handler: handlers.updateWater }],
+		},
+		{
+			name: 'Props & Roads',
+			controls: [
+				{ key: 'propsEnabled', name: 'enabled', handler: handlers.updateProps },
+				{ key: 'propsRenderDistance', min: 1, max: 12, step: 1, name: 'render distance', handler: handlers.updateProps, useFinish: true },
+				{ key: 'treesEnabled', name: 'trees', handler: handlers.updateProps },
+				{ key: 'buildingsEnabled', name: 'buildings', handler: handlers.updateProps },
+				{ key: 'roadsEnabled', name: 'roads & bridges', handler: handlers.updateProps },
+			],
 		},
 		{
 			name: 'Post Processing',

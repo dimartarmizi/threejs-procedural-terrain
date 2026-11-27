@@ -12,6 +12,10 @@ export function createTerrainSystem(scene, settings) {
 		tileStreaming.markDirty();
 	}
 
+	function refreshProps() {
+		tileStreaming.markPropsDirty();
+	}
+
 	function update(cameraPosition) {
 		tileStreaming.update(cameraPosition);
 	}
@@ -38,6 +42,7 @@ export function createTerrainSystem(scene, settings) {
 
 	return {
 		applyTerrainSettings,
+		refreshProps,
 		update,
 		setAtmosphere,
 		setLighting,

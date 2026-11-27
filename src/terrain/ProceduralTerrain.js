@@ -3,6 +3,7 @@ import { getTerrainOptions } from './config.js';
 import { createSimplexNoise2D } from './noise.js';
 import { applyTerrainColor, setupTerrainColorMaterial } from './color.js';
 import { setupFogMaterial } from '../core/fog.js';
+import { RoadNetwork } from './roadNetwork.js';
 
 function clamp(value, min, max) {
 	return Math.max(min, Math.min(max, value));
@@ -43,18 +44,45 @@ export class ProceduralTerrain {
 			lacunarity: this.lacunarity,
 		});
 
+		this.roadNetwork = new RoadNetwork(this);
+
 		applyTerrainColor(this.sharedMaterial, this);
 	}
 
 	sampleHeight(worldX, worldZ) {
 		const sampleX = worldX / this.scale;
 		const sampleZ = worldZ / this.scale;
+
+		const macroZone = this.noise(sampleX * 0.28 + 31.4, sampleZ * 0.28 - 19.2);
+		const valleyFlatness = clamp((0.18 - macroZone) / 0.55, 0, 1);
+		const valleyBlend = valleyFlatness * valleyFlatness * (3 - 2 * valleyFlatness);
+
 		const broadNoise = this.noise(sampleX, sampleZ);
 		const detailNoise = this.noise(sampleX * 1.9 + 17.3, sampleZ * 1.9 - 11.8);
 		const ridgeNoise = 1 - Math.abs(broadNoise);
-		const terrainShape = clamp(broadNoise * 0.7 + detailNoise * 0.3 + ridgeNoise * 0.2, -1, 1);
+		const rawShape = clamp(broadNoise * 0.7 + detailNoise * 0.3 + ridgeNoise * 0.2, -1, 1);
 
-		return terrainShape * this.heightMultiplier + this.baseHeight;
+		const flatShape = rawShape * 0.14 - 0.04;
+		const terrainShape = rawShape + (flatShape - rawShape) * (valleyBlend * 0.78);
+		let height = terrainShape * this.heightMultiplier + this.baseHeight;
+
+		if (this.terrainType !== 'desert') {
+			const warpX = this.noise(sampleX * 0.55 + 7.1, sampleZ * 0.55 - 3.3) * 0.32;
+			const warpZ = this.noise(sampleX * 0.55 - 5.8, sampleZ * 0.55 + 9.4) * 0.32;
+			const riverVal = Math.abs(this.noise(sampleX * 0.42 + warpX, sampleZ * 0.42 + warpZ));
+			const riverWidth = 0.036 + valleyBlend * 0.022;
+			if (riverVal < riverWidth * 2.4 && height < this.heightMultiplier * 0.65) {
+				const t = clamp(1 - riverVal / (riverWidth * 2.4), 0, 1);
+				const bankSmooth = t * t * (3 - 2 * t);
+				const channelT = clamp(1 - riverVal / riverWidth, 0, 1);
+				const channelSmooth = channelT * channelT * (3 - 2 * channelT);
+				const valleyTarget = Math.min(height, 26);
+				height = height + (valleyTarget - height) * bankSmooth * 0.85;
+				height = height + (-18 - height) * channelSmooth;
+			}
+		}
+
+		return height;
 	}
 
 	createTileGeometry(tileX, tileZ, resolution = this.tileResolution) {

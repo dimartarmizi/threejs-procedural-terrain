@@ -1,12 +1,17 @@
 import { applyFog } from '../core/fog.js';
 import { createWaterSurface, createWaterTileMesh, updateWaterSurface } from '../core/water.js';
+import { createPropsResources, createTileProps } from '../core/props.js';
 
 export function createTileStreamingController(terrain, scene, settings) {
 	const tiles = new Map();
+	const tileProps = new Map();
+	const propsResources = createPropsResources();
 	const tileCreationBudget = 4;
 	const lodUpdateBudget = 4;
+	const propsCreationBudget = 2;
 	const state = {
 		needsTerrainRefresh: true,
+		needsPropsRefresh: false,
 		atmosphereState: null,
 		lightingState: null,
 		waterSurface: null,
@@ -17,19 +22,43 @@ export function createTileStreamingController(terrain, scene, settings) {
 		state.needsTerrainRefresh = true;
 	}
 
+	function markPropsDirty() {
+		state.needsPropsRefresh = true;
+	}
+
 	function update(cameraPosition) {
 		if (state.needsTerrainRefresh) {
 			refreshTiles(tiles, terrain);
+			clearAllProps(scene, tileProps);
 			state.needsTerrainRefresh = false;
+			state.needsPropsRefresh = false;
+		} else if (state.needsPropsRefresh) {
+			clearAllProps(scene, tileProps);
+			state.needsPropsRefresh = false;
 		}
 
 		const centerX = Math.round(cameraPosition.x / terrain.tileSize);
 		const centerZ = Math.round(cameraPosition.z / terrain.tileSize);
 		const neededTiles = new Set();
+		const neededProps = new Set();
 		const missingTiles = [];
 		const lodUpdates = [];
 
-		collectNeededTiles(settings.renderDistance, centerX, centerZ, tiles, neededTiles, missingTiles, lodUpdates);
+		const propsRadius = Math.min(settings.renderDistance, settings.propsRenderDistance);
+		const maxPropsDistSq = propsRadius * propsRadius;
+
+		collectNeededTiles(
+			settings.renderDistance,
+			centerX,
+			centerZ,
+			tiles,
+			neededTiles,
+			neededProps,
+			missingTiles,
+			lodUpdates,
+			settings.propsEnabled,
+			maxPropsDistSq
+		);
 		missingTiles.sort(sortByPriority);
 		createQueuedTiles(missingTiles, tileCreationBudget, terrain, scene, settings.wireframe, tiles);
 
@@ -42,6 +71,7 @@ export function createTileStreamingController(terrain, scene, settings) {
 			}
 		}
 
+		syncProps(scene, terrain, tiles, tileProps, neededProps, propsResources, propsCreationBudget, settings);
 		removeUnusedTiles(scene, tiles, neededTiles);
 		const fogState = applyFog(
 			tiles,
@@ -50,7 +80,8 @@ export function createTileStreamingController(terrain, scene, settings) {
 			settings.renderDistance,
 			settings.fogDistance,
 			settings.fogEnabled,
-			state.atmosphereState
+			state.atmosphereState,
+			[propsResources.material, propsResources.roadMaterial, propsResources.bridgeMaterial]
 		);
 		syncWaterSurface(scene, terrain, settings, cameraPosition, getTimeSeconds(), fogState, state);
 	}
@@ -70,6 +101,7 @@ export function createTileStreamingController(terrain, scene, settings) {
 
 	return {
 		markDirty,
+		markPropsDirty,
 		update,
 		setAtmosphere,
 		setLighting,
@@ -89,7 +121,18 @@ function refreshTiles(tiles, terrain) {
 	});
 }
 
-function collectNeededTiles(renderDistance, centerX, centerZ, tiles, neededTiles, missingTiles, lodUpdates) {
+function collectNeededTiles(
+	renderDistance,
+	centerX,
+	centerZ,
+	tiles,
+	neededTiles,
+	neededProps,
+	missingTiles,
+	lodUpdates,
+	propsEnabled,
+	maxPropsDistSq
+) {
 	const maxDistSq = (renderDistance + 0.5) * (renderDistance + 0.5);
 	for (let tileZ = centerZ - renderDistance; tileZ <= centerZ + renderDistance; tileZ += 1) {
 		for (let tileX = centerX - renderDistance; tileX <= centerX + renderDistance; tileX += 1) {
@@ -98,6 +141,9 @@ function collectNeededTiles(renderDistance, centerX, centerZ, tiles, neededTiles
 
 			const key = createTileKey(tileX, tileZ);
 			neededTiles.add(key);
+			if (propsEnabled && priority <= maxPropsDistSq) {
+				neededProps.add(key);
+			}
 			const targetResolution = getTargetResolution(priority);
 
 			const existing = tiles.get(key);
@@ -115,6 +161,52 @@ function collectNeededTiles(renderDistance, centerX, centerZ, tiles, neededTiles
 					targetResolution,
 				});
 			}
+		}
+	}
+}
+
+function disposePropsGroup(scene, group) {
+	if (!group) return;
+	for (let i = 0; i < group.children.length; i++) {
+		const child = group.children[i];
+		if (child.userData.disposeGeometry) {
+			child.geometry.dispose();
+		}
+	}
+	scene.remove(group);
+}
+
+function clearAllProps(scene, tileProps) {
+	tileProps.forEach((group) => {
+		disposePropsGroup(scene, group);
+	});
+	tileProps.clear();
+}
+
+function syncProps(scene, terrain, tiles, tileProps, neededProps, resources, budget, settings) {
+	let created = 0;
+	for (const key of neededProps) {
+		if (tileProps.has(key)) continue;
+		const tile = tiles.get(key);
+		if (!tile) continue;
+		if (created >= budget) break;
+		const group = createTileProps(
+			tile.userData.tileX,
+			tile.userData.tileZ,
+			terrain,
+			resources,
+			tile.userData.resolution,
+			settings
+		);
+		if (group) scene.add(group);
+		tileProps.set(key, group);
+		created += 1;
+	}
+
+	for (const [key, group] of tileProps.entries()) {
+		if (!neededProps.has(key)) {
+			disposePropsGroup(scene, group);
+			tileProps.delete(key);
 		}
 	}
 }

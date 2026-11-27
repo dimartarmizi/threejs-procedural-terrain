@@ -188,10 +188,98 @@ function buildTerrainShaderSource() {
 	float slopeAttenuation = 1.0 - smoothstep(0.45, 0.9, slope);
 	return clamp(shorelineWeight * (0.7 + slopeAttenuation * 0.3), 0.0, 1.0);
 }`,
-		`vec3 sampleTerrainColor(float worldHeight, float normalizedHeight, float slope, int colorMode, int terrainTypeId) {
+		`float terrainHash21(vec2 p) {
+	p = fract(p * vec2(123.34, 456.21));
+	p += dot(p, p + 45.32);
+	return fract(p.x * p.y);
+}
+
+float terrainVNoise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(
+		mix(terrainHash21(i), terrainHash21(i + vec2(1.0, 0.0)), f.x),
+		mix(terrainHash21(i + vec2(0.0, 1.0)), terrainHash21(i + vec2(1.0, 1.0)), f.x),
+		f.y
+	);
+}
+
+float terrainDetailFbm(vec2 p) {
+	float v = 0.0;
+	float a = 0.5;
+	for (int i = 0; i < 3; i++) {
+		v += a * terrainVNoise(p);
+		p *= 2.13;
+		a *= 0.5;
+	}
+	return v;
+}
+
+vec3 sampleFarmlandColor(vec2 worldXZ, float scaleNorm) {
+	float angle = 0.24;
+	mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+	vec2 uv = (rot * worldXZ) * (0.0048 / scaleNorm);
+
+	vec2 macroCell = floor(uv * 0.25);
+	if (terrainHash21(macroCell) > 0.5) {
+		uv = vec2(uv.y * 1.12, uv.x * 0.88);
+	}
+
+	vec2 cell = floor(uv);
+	vec2 f = fract(uv);
+	float plotId = terrainHash21(cell + macroCell * 7.13);
+	float subN = terrainVNoise(worldXZ * (0.028 / scaleNorm));
+
+	float bx = smoothstep(0.0, 0.055, f.x) * smoothstep(0.0, 0.055, 1.0 - f.x);
+	float by = smoothstep(0.0, 0.055, f.y) * smoothstep(0.0, 0.055, 1.0 - f.y);
+	float insidePlot = bx * by;
+
+	vec3 cDark = vec3(0.09, 0.20, 0.07);
+	vec3 cLush = vec3(0.14, 0.30, 0.09);
+	vec3 cBright = vec3(0.24, 0.38, 0.12);
+	vec3 cGolden = vec3(0.39, 0.36, 0.16);
+	vec3 cSoil = vec3(0.22, 0.19, 0.13);
+	vec3 cBund = vec3(0.18, 0.17, 0.12);
+
+	vec3 col;
+	if (plotId < 0.25) col = mix(cDark, cLush, subN);
+	else if (plotId < 0.62) col = mix(cLush, cBright, subN);
+	else if (plotId < 0.84) col = mix(cBright, cGolden, subN * 0.65);
+	else col = mix(cSoil, cGolden, subN * 0.5);
+
+	return mix(cBund, col, insidePlot);
+}
+
+vec3 sampleTerrainColor(vec3 worldPos, float normalizedHeight, float slope, int colorMode, int terrainTypeId) {
+	float worldHeight = worldPos.y;
+	float scaleNorm = max(terrainScale / 5000.0, 0.14);
 	vec3 terrainColor = colorMode == 1
 		? sampleThemePalette(normalizedHeight, terrainTypeId)
 		: sampleBiomeTerrainColor(normalizedHeight, slope, terrainTypeId);
+
+	float macroDetail = terrainDetailFbm(worldPos.xz * (0.0018 / scaleNorm));
+	float microDetail = terrainVNoise(worldPos.xz * (0.022 / scaleNorm));
+	terrainColor *= mix(0.84, 1.16, macroDetail * 0.65 + microDetail * 0.35);
+
+	if (terrainTypeId != 3 && colorMode == 0) {
+		float flatMask = 1.0 - smoothstep(0.06, 0.16, slope);
+		float maxFarmH = min(230.0, terrainBaseHeight + terrainHeightMultiplier * 0.36);
+		float minFarmLow = max(4.0, 8.0 * scaleNorm);
+		float minFarmHigh = max(10.0, 22.0 * scaleNorm);
+		float elevMask = smoothstep(minFarmLow, minFarmHigh, worldHeight) * (1.0 - smoothstep(maxFarmH * 0.68, maxFarmH, worldHeight));
+		float farmRegion = smoothstep(0.30, 0.60, terrainVNoise(worldPos.xz * (0.00028 / scaleNorm) + vec2(4.2, -7.8)));
+		float farmWeight = flatMask * elevMask * farmRegion;
+		if (farmWeight > 0.01) {
+			vec3 farmCol = sampleFarmlandColor(worldPos.xz, scaleNorm);
+			terrainColor = mix(terrainColor, farmCol, farmWeight * 0.88);
+		}
+
+		float strata = sin(worldHeight * (0.08 / scaleNorm) + macroDetail * 5.0) * 0.5 + 0.5;
+		float cliffMask = smoothstep(0.34, 0.62, slope);
+		vec3 cliffCol = mix(vec3(0.18, 0.18, 0.17), vec3(0.34, 0.32, 0.29), strata * 0.6 + microDetail * 0.4);
+		terrainColor = mix(terrainColor, cliffCol, cliffMask * 0.72);
+	}
 
 	float sandWeight = sampleTerrainSandWeight(worldHeight, normalizedHeight, slope);
 	return mix(terrainColor, ${colorToVec3Literal(SAND_COLOR)}, sandWeight);
@@ -209,6 +297,7 @@ export function setupTerrainColorMaterial(material, terrain) {
 	material.onBeforeCompile = function (shader) {
 		shader.uniforms.terrainBaseHeight = { value: terrain.baseHeight };
 		shader.uniforms.terrainHeightMultiplier = { value: terrain.heightMultiplier };
+		shader.uniforms.terrainScale = { value: terrain.scale };
 		shader.uniforms.terrainColorMode = { value: getTerrainColorModeValue(terrain.colorMode) };
 		shader.uniforms.terrainTypeId = { value: getTerrainTypeId(terrain.terrainType) };
 
@@ -233,11 +322,11 @@ export function setupTerrainColorMaterial(material, terrain) {
 		shader.fragmentShader = shader.fragmentShader
 			.replace(
 				'#include <common>',
-				`#include <common>\nuniform float terrainBaseHeight;\nuniform float terrainHeightMultiplier;\nuniform int terrainColorMode;\nuniform int terrainTypeId;\nvarying vec3 vTerrainWorldPosition;\nvarying vec3 vTerrainWorldNormal;\n${TERRAIN_SHADER_SOURCE}`
+				`#include <common>\nuniform float terrainBaseHeight;\nuniform float terrainHeightMultiplier;\nuniform float terrainScale;\nuniform int terrainColorMode;\nuniform int terrainTypeId;\nvarying vec3 vTerrainWorldPosition;\nvarying vec3 vTerrainWorldNormal;\n${TERRAIN_SHADER_SOURCE}`
 			)
 			.replace(
 				'#include <color_fragment>',
-				`float terrainNormalizedHeight = (vTerrainWorldPosition.y - terrainBaseHeight) / max(terrainHeightMultiplier, 0.0001);\nfloat terrainSlopeValue = terrainSlope(vTerrainWorldNormal);\ndiffuseColor.rgb = sampleTerrainColor(vTerrainWorldPosition.y, terrainNormalizedHeight, terrainSlopeValue, terrainColorMode, terrainTypeId);`
+				`float terrainNormalizedHeight = (vTerrainWorldPosition.y - terrainBaseHeight) / max(terrainHeightMultiplier, 0.0001);\nfloat terrainSlopeValue = terrainSlope(vTerrainWorldNormal);\ndiffuseColor.rgb = sampleTerrainColor(vTerrainWorldPosition, terrainNormalizedHeight, terrainSlopeValue, terrainColorMode, terrainTypeId);`
 			);
 
 		material.userData.terrainColorShader = shader;
@@ -258,6 +347,7 @@ export function applyTerrainColor(material, terrain) {
 	const pendingUniforms = {
 		terrainBaseHeight: terrain.baseHeight,
 		terrainHeightMultiplier: terrain.heightMultiplier,
+		terrainScale: terrain.scale,
 		terrainColorMode: getTerrainColorModeValue(terrain.colorMode),
 		terrainTypeId: getTerrainTypeId(terrain.terrainType),
 	};
@@ -269,6 +359,7 @@ export function applyTerrainColor(material, terrain) {
 
 	shader.uniforms.terrainBaseHeight.value = pendingUniforms.terrainBaseHeight;
 	shader.uniforms.terrainHeightMultiplier.value = pendingUniforms.terrainHeightMultiplier;
+	shader.uniforms.terrainScale.value = pendingUniforms.terrainScale;
 	shader.uniforms.terrainColorMode.value = pendingUniforms.terrainColorMode;
 	shader.uniforms.terrainTypeId.value = pendingUniforms.terrainTypeId;
 	material.userData.pendingTerrainColorUniforms = null;
@@ -281,6 +372,7 @@ function applyPendingTerrainColorUniforms(uniforms, pending) {
 
 	uniforms.terrainBaseHeight.value = pending.terrainBaseHeight;
 	uniforms.terrainHeightMultiplier.value = pending.terrainHeightMultiplier;
+	uniforms.terrainScale.value = pending.terrainScale;
 	uniforms.terrainColorMode.value = pending.terrainColorMode;
 	uniforms.terrainTypeId.value = pending.terrainTypeId;
 }

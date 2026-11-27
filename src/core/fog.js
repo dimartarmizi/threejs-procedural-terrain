@@ -46,7 +46,13 @@ export function setupFogMaterial(material) {
 			)
 			.replace(
 				'#include <worldpos_vertex>',
-				'#include <worldpos_vertex>\nvec4 fogCalcWorldPos = modelMatrix * vec4( transformed, 1.0 );\nvFogWorldPosition = fogCalcWorldPos.xyz;'
+				`#include <worldpos_vertex>
+				vec4 fogLocalPos = vec4( transformed, 1.0 );
+				#ifdef USE_INSTANCING
+				fogLocalPos = instanceMatrix * fogLocalPos;
+				#endif
+				vec4 fogCalcWorldPos = modelMatrix * fogLocalPos;
+				vFogWorldPosition = fogCalcWorldPos.xyz;`
 			);
 
 		shader.fragmentShader = shader.fragmentShader
@@ -120,7 +126,7 @@ export function setupFogMaterial(material) {
 	material.userData.fogInstalled = true;
 }
 
-export function applyFog(tiles, cameraPosition, terrain, renderDistance, fogDistance, fogEnabled, atmosphereState) {
+export function applyFog(tiles, cameraPosition, terrain, renderDistance, fogDistance, fogEnabled, atmosphereState, extraMaterials = []) {
 	const fogParams = computeFogParameters(terrain, renderDistance, fogDistance);
 	const fogNear = fogParams.fogNear;
 	const fogFar = fogParams.fogFar;
@@ -138,6 +144,21 @@ export function applyFog(tiles, cameraPosition, terrain, renderDistance, fogDist
 		fogHeightMax,
 		safeFogDensity
 	);
+
+	for (const mat of extraMaterials) {
+		if (mat) {
+			updateFogUniforms(
+				mat,
+				cameraPosition,
+				atmosphereState,
+				fogNear,
+				fogFar,
+				fogHeightMin,
+				fogHeightMax,
+				safeFogDensity
+			);
+		}
+	}
 
 	return {
 		cameraPosition,
