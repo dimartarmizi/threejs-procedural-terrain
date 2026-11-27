@@ -71,14 +71,16 @@ export class ProceduralTerrain {
 			const warpZ = this.noise(sampleX * 0.55 - 5.8, sampleZ * 0.55 + 9.4) * 0.32;
 			const riverVal = Math.abs(this.noise(sampleX * 0.42 + warpX, sampleZ * 0.42 + warpZ));
 			const riverWidth = 0.036 + valleyBlend * 0.022;
-			if (riverVal < riverWidth * 2.4 && height < this.heightMultiplier * 0.65) {
+			if (riverVal < riverWidth * 2.4 && height > -18 && height < this.heightMultiplier * 0.65) {
 				const t = clamp(1 - riverVal / (riverWidth * 2.4), 0, 1);
 				const bankSmooth = t * t * (3 - 2 * t);
 				const channelT = clamp(1 - riverVal / riverWidth, 0, 1);
 				const channelSmooth = channelT * channelT * (3 - 2 * channelT);
+				const oceanFade = clamp((height + 18) / 20, 0, 1);
 				const valleyTarget = Math.min(height, 26);
-				height = height + (valleyTarget - height) * bankSmooth * 0.85;
-				height = height + (-18 - height) * channelSmooth;
+				height = height + (valleyTarget - height) * bankSmooth * 0.85 * oceanFade;
+				const channelTarget = Math.min(height, -18);
+				height = height + (channelTarget - height) * channelSmooth;
 			}
 		}
 
