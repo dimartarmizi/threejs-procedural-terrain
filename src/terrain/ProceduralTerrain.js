@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { getTerrainOptions } from './config.js';
 import { createSimplexNoise2D } from './noise.js';
 import { applyTerrainColor, setupTerrainColorMaterial } from './color.js';
+import { setupFogMaterial } from '../core/fog.js';
 
 function clamp(value, min, max) {
 	return Math.max(min, Math.min(max, value));
@@ -9,7 +10,16 @@ function clamp(value, min, max) {
 
 export class ProceduralTerrain {
 	constructor(options = {}) {
+		this.sharedMaterial = new THREE.MeshStandardMaterial({
+			color: 0xffffff,
+			roughness: 1,
+			metalness: 0,
+			wireframe: false,
+		});
 		this.setOptions(options);
+		setupTerrainColorMaterial(this.sharedMaterial, this);
+		setupFogMaterial(this.sharedMaterial);
+		applyTerrainColor(this.sharedMaterial, this);
 	}
 
 	setOptions(options = {}) {
@@ -32,6 +42,8 @@ export class ProceduralTerrain {
 			persistence: this.persistence,
 			lacunarity: this.lacunarity,
 		});
+
+		applyTerrainColor(this.sharedMaterial, this);
 	}
 
 	sampleHeight(worldX, worldZ) {
@@ -45,31 +57,32 @@ export class ProceduralTerrain {
 		return terrainShape * this.heightMultiplier + this.baseHeight;
 	}
 
-	createTileMesh(tileX, tileZ, wireframe) {
-		const geometry = new THREE.PlaneGeometry(this.tileSize, this.tileSize, this.tileResolution, this.tileResolution);
+	createTileGeometry(tileX, tileZ, resolution = this.tileResolution) {
+		const geometry = new THREE.PlaneGeometry(this.tileSize, this.tileSize, resolution, resolution);
 		geometry.rotateX(-Math.PI / 2);
-
 		this.updateTileGeometry(geometry, tileX * this.tileSize, tileZ * this.tileSize);
+		return geometry;
+	}
 
-		const material = new THREE.MeshStandardMaterial({
-			color: 0xffffff,
-			roughness: 1,
-			metalness: 0,
-			wireframe: wireframe,
-		});
-		setupTerrainColorMaterial(material, this);
-		applyTerrainColor(material, this);
-
-		const mesh = new THREE.Mesh(geometry, material);
+	createTileMesh(tileX, tileZ, wireframe, resolution = this.tileResolution) {
+		this.sharedMaterial.wireframe = wireframe;
+		const geometry = this.createTileGeometry(tileX, tileZ, resolution);
+		const mesh = new THREE.Mesh(geometry, this.sharedMaterial);
 		mesh.position.x = tileX * this.tileSize;
 		mesh.position.z = tileZ * this.tileSize;
 		mesh.userData.tileX = tileX;
 		mesh.userData.tileZ = tileZ;
+		mesh.userData.resolution = resolution;
 		return mesh;
 	}
 
-	updateTileMesh(tile) {
-		applyTerrainColor(tile.material, this);
+	updateTileMesh(tile, resolution = tile.userData.resolution || this.tileResolution) {
+		if (tile.userData.resolution !== resolution) {
+			tile.geometry.dispose();
+			tile.geometry = this.createTileGeometry(tile.userData.tileX, tile.userData.tileZ, resolution);
+			tile.userData.resolution = resolution;
+			return;
+		}
 		this.updateTileGeometry(tile.geometry, tile.position.x, tile.position.z);
 	}
 

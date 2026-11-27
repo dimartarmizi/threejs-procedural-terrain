@@ -223,7 +223,7 @@ export function setupTerrainColorMaterial(material, terrain) {
 			)
 			.replace(
 				'#include <worldpos_vertex>',
-				'#include <worldpos_vertex>\nvTerrainWorldPosition = worldPosition.xyz;'
+				'#include <worldpos_vertex>\nvec4 terrainColorWorldPos = modelMatrix * vec4( transformed, 1.0 );\nvTerrainWorldPosition = terrainColorWorldPos.xyz;'
 			)
 			.replace(
 				'#include <beginnormal_vertex>',
